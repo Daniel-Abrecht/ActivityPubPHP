@@ -1,0 +1,145 @@
+@prefix : <http://www.w3.org/ns/activitystreams#> .
+@prefix as: <http://www.w3.org/ns/activitystreams#> .
+@prefix fix: <http://dpa.li/ns/owl/fixes/activitystreams#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://dpa.li/ns/owl/fixes/activitystreams> .
+
+###
+# The spec specifies actor types and their properties:
+#  * https://www.w3.org/TR/activitypub/#actors
+#  * https://www.w3.org/TR/activitystreams-vocabulary/#actor-types
+# But it doesn't formally specify it nor include it in the owl file.
+# So let's fix that and let actors actually be actors!
+###
+
+###
+# Patching actor types to be of actor type
+###
+
+as:Person a owl:Class       ; rdfs:subClassOf fix:Actor .
+as:Group a owl:Class        ; rdfs:subClassOf fix:Actor .
+as:Service a owl:Class      ; rdfs:subClassOf fix:Actor .
+as:Application a owl:Class  ; rdfs:subClassOf fix:Actor .
+as:Organization a owl:Class ; rdfs:subClassOf fix:Actor .
+
+###
+# Defining actor & endpoint types
+###
+
+fix:Actor a owl:Class ;
+  rdfs:label "Actor"@en ;
+#  rdfs:subClassOf as:Object ;
+  rdfs:comment "An actor which can be interacterd with"@en .
+
+fix:inbox a owl:DatatypeProperty;
+  rdfs:label "inbox"@en ;
+  rdfs:comment "A reference to an [ActivityStreams] OrderedCollection comprised of all the messages received by the actor"@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:OrderedCollection as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:outbox a owl:DatatypeProperty;
+  rdfs:label "outbox"@en ;
+  rdfs:comment "An [ActivityStreams] OrderedCollection comprised of all the messages produced by the actor"@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:OrderedCollection as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:following a owl:DatatypeProperty;
+  rdfs:label "following"@en ;
+  rdfs:comment "A link to an [ActivityStreams] collection of the actors that this actor is following"@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:Collection as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:followers a owl:DatatypeProperty;
+  rdfs:label "followers"@en ;
+  rdfs:comment "A link to an [ActivityStreams] collection of the actors that follow this actor"@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:Collection as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:liked a owl:DatatypeProperty;
+  rdfs:label "liked"@en ;
+  rdfs:comment "A link to an [ActivityStreams] collection of objects this actor has liked"@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:OrderedCollection as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:streams a owl:ObjectProperty;
+  rdfs:label "streams"@en ;
+  rdfs:comment "A list of supplementary Collections which may be of interest."@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:Collection as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:preferredUsername a owl:DatatypeProperty;
+  rdfs:label "preferredUsername"@en ;
+  rdfs:comment "A short username which may be used to refer to the actor, with no uniqueness guarantees."@en ;
+  rdfs:range xsd:string ;
+  rdfs:domain fix:Actor .
+
+fix:endpoints a owl:DatatypeProperty;
+  rdfs:label "endpoints"@en ;
+  rdfs:comment "A json object which maps additional (typically server/domain-wide) endpoints which may be useful either for this actor or someone referencing this actor. This mapping may be nested inside the actor document as the value or may be a link to a JSON-LD document with these properties."@en ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( fix:Endpoint as:Link )
+  ] ;
+  rdfs:domain fix:Actor .
+
+fix:Endpoint a owl:Class ;
+  rdfs:label "Endpoint"@en ;
+  rdfs:comment "A json object which maps additional (typically server/domain-wide) endpoints"@en .
+
+fix:proxyUrl a owl:DatatypeProperty;
+  rdfs:label "proxyUrl"@en ;
+  rdfs:range xsd:string ;
+  rdfs:comment "Endpoint URI so this actor's clients may access remote ActivityStreams objects which require authentication to access. To use this endpoint, the client posts an x-www-form-urlencoded id parameter with the value being the id of the requested ActivityStreams object."@en ;
+  rdfs:domain fix:Endpoint .
+
+fix:oauthAuthorizationEndpoint a owl:DatatypeProperty;
+  rdfs:label "oauthAuthorizationEndpoint"@en ;
+  rdfs:range xsd:string ;
+  rdfs:comment "If OAuth 2.0 bearer tokens [RFC6749] [RFC6750] are being used for authenticating client to server interactions, this endpoint specifies a URI at which a browser-authenticated user may obtain a new authorization grant."@en ;
+  rdfs:domain fix:Endpoint .
+
+fix:oauthTokenEndpoint a owl:DatatypeProperty;
+  rdfs:label "oauthTokenEndpoint"@en ;
+  rdfs:range xsd:string ;
+  rdfs:comment "If OAuth 2.0 bearer tokens [RFC6749] [RFC6750] are being used for authenticating client to server interactions, this endpoint specifies a URI at which a client may acquire an access token."@en ;
+  rdfs:domain fix:Endpoint .
+
+fix:provideClientKey a owl:DatatypeProperty;
+  rdfs:label "provideClientKey"@en ;
+  rdfs:range xsd:string ;
+  rdfs:comment "If Linked Data Signatures and HTTP Signatures are being used for authentication and authorization, this endpoint specifies a URI at which browser-authenticated users may authorize a client's public key for client to server interactions."@en ;
+  rdfs:domain fix:Endpoint .
+
+fix:signClientKey a owl:DatatypeProperty;
+  rdfs:label "signClientKey"@en ;
+  rdfs:range xsd:string ;
+  rdfs:comment "If Linked Data Signatures and HTTP Signatures are being used for authentication and authorization, this endpoint specifies a URI at which a client key may be signed by the actor's key for a time window to act on behalf of the actor in interacting with foreign servers."@en ;
+  rdfs:domain fix:Endpoint .
+
+fix:sharedInbox a owl:DatatypeProperty;
+  rdfs:label "sharedInbox"@en ;
+  rdfs:range xsd:string ;
+  rdfs:comment "An optional endpoint used for wide delivery of publicly addressed activities and activities sent to followers. sharedInbox endpoints SHOULD also be publicly readable OrderedCollection objects containing objects addressed to the Public special collection. Reading from the sharedInbox endpoint MUST NOT present objects which are not addressed to the Public endpoint."@en ;
+  rdfs:domain fix:Endpoint .
