@@ -1,6 +1,7 @@
 @prefix : <http://www.w3.org/ns/activitystreams#> .
 @prefix as: <http://www.w3.org/ns/activitystreams#> .
 @prefix fix: <http://dpa.li/ns/owl/fixes/activitystreams#> .
+@prefix meta: <http://dpa.li/ns/owl/fixes/meta#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xml: <http://www.w3.org/XML/1998/namespace> .
@@ -15,6 +16,12 @@
 # But it doesn't formally specify it nor include it in the owl file.
 # So let's fix that and let actors actually be actors!
 ###
+
+###
+# While I'm at it, let's specify what the jsonld @context is going to be
+###
+
+as: a meta:nsinfo; meta:context "http://www.w3.org/ns/activitystreams" .
 
 ###
 # Patching actor types to be of actor type

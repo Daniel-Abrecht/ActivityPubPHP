@@ -14,7 +14,7 @@ owl_FunctionalProperty = URIRef("http://www.w3.org/2002/07/owl#FunctionalPropert
 owl_Datatype = URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")
 owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty]
 
-wrapper = textwrap.TextWrapper(width=80-3)
+wrapper = textwrap.TextWrapper(width=80-5)
 
 def escape_id(s):
   s = re.sub('[^a-zA-Z0-9_\x7f-\xff\\\\]', '_', s)
@@ -24,11 +24,11 @@ def escape_id(s):
 class Registry:
   def __init__(self, g):
     self.g = g
-    self.module = { '': Module(self, '') }
-  def getOrCreateModule(self, ns):
+    self.module = { '': Module(self, '', None) }
+  def getOrCreateModule(self, ns, context):
     if ns in self.module:
       return self.module
-    m = Module(self, ns)
+    m = Module(self, ns, context)
     self.module[ns] = m
     return m
   def getOrCreateClass(self, uri):
@@ -56,8 +56,9 @@ class Registry:
       m.serialize()
 
 class Module:
-  def __init__(self, registry, uri):
+  def __init__(self, registry, uri, context):
     self.uri = uri
+    self.context = context or uri
     self.registry = registry
     self.g = registry.g
     self.classes = {}
@@ -150,8 +151,12 @@ class Class:
       s += ', '
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
     s += ' {\n'
+    s += '  const NS = '+json.dumps(self.module.context)+';\n'
+    s += '  const TYPE = '+json.dumps(self.name)+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
     for name, property in self.property.items():
+      if property.comment:
+        s += '  /**\n' + ''.join([f"   * {s}\n" for s in wrapper.wrap(text='\n'.join(property.comment))]) + '   */\n'
       t  = ''
       tv = ''
       if property.type:
@@ -199,7 +204,7 @@ class Class:
   public function toArray() : array { return \\auto\\toArrayHelper($this); }
   public function fromArray(array $data) : void { \\auto\\fromArrayHelper($this, $data); }
   public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
-  public function unserialize(string $data) : void { $this->fromArray(json_decode($data)); }
+  public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }
 """
     s += '}\n'
     return s
@@ -218,6 +223,7 @@ class Property:
     self.g = cls.g
     self.uri = uri
     self.type = None
+    self.comment = []
     self.nullable = True
     self.objectproperty = False
     self.datatypeproperty = False
@@ -229,6 +235,8 @@ class Property:
   def setMeta(self, key, value):
     if key == URIRef('http://www.w3.org/2000/01/rdf-schema#range'):
       self.type = self.parent.module.registry.getOrCreateClass(value)
+    elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#comment'):
+      self.comment.append(value)
     elif key == 'kind':
       if   value == owl_DatatypeProperty:
         self.datatypeproperty = True
@@ -264,7 +272,10 @@ def createModule(files):
     g.parse(f, format='turtle')
   r = Registry(g)
   for prefix, ns in g.namespaces():
-    r.getOrCreateModule(ns)
+    context = None
+    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#context'), None)):
+      context = o
+    r.getOrCreateModule(ns, context)
   for s, p, o in g.triples((None, RDF.type, owl_Class)):
     ci = r.getOrCreateClass(s)
     for s, p, o in g.triples((s, None, None)):
