@@ -3,6 +3,8 @@
 declare(strict_types = 1);
 namespace auto;
 
+require 'xsd.php';
+
 spl_autoload_register(function($class_name){
   if(!str_starts_with($class_name, 'auto\\'))
     return;
@@ -121,7 +123,11 @@ function toArrayHelper(POJO $o) : array {
       $value = $o->{'get_'.$key}();
       if($value === null || (is_array($value) && count($value) == 0))
         continue;
-      $result[$entry->name] = $value;
+      if($value instanceof POJO){
+        $result[$entry->name] = toArrayHelper($value);
+      }else{
+        $result[$entry->name] = $value;
+      }
     }
     $result['@context'] = $o::NS;
     $result['type'] = $o::TYPE;
@@ -166,12 +172,14 @@ function array_flatten(array $x) : array {
   );
 }
 
-$image = new \auto\www_w3_org\ns\activitystreams\C_Person();
-echo $image->serialize() . "\n";
+$person = new \auto\www_w3_org\ns\activitystreams\C_Person();
+$person->set_preferredUsername("Hello World!");
+echo $person->serialize() . "\n";
 
 print_r(unserialize('
 {
   "@context": "http://www.w3.org/ns/activitystreams",
-  "type": "Person"
+  "type": "Person",
+  "preferredUsername": "Hello World!"
 }
 ')->serialize()."\n");

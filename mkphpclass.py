@@ -16,6 +16,30 @@ owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty
 
 wrapper = textwrap.TextWrapper(width=80-5)
 
+native_types = {
+  "http://www.w3.org/2001/XMLSchema#string": ["string",None],
+  "http://www.w3.org/2001/XMLSchema#normalizedString": ["string",None],
+  "http://www.w3.org/2001/XMLSchema#decimal": ["float",None],
+  "http://www.w3.org/2001/XMLSchema#float": ["float",None],
+  "http://www.w3.org/2001/XMLSchema#double": ["float",None],
+  "http://www.w3.org/2001/XMLSchema#integer": ["int",None],
+  "http://www.w3.org/2001/XMLSchema#boolean": ["bool",None],
+  "http://www.w3.org/2001/XMLSchema#base64Binary": ["string",None],
+  "http://www.w3.org/2001/XMLSchema#hexBinary": ["string",None],
+  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\auto\\xsd\\nonPositiveInteger"],
+  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\auto\\xsd\\negativeInteger"],
+  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\auto\\xsd\\long"],
+  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\auto\\xsd\\int"],
+  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\auto\\xsd\\short"],
+  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\auto\\xsd\\byte"],
+  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\auto\\xsd\\nonNegativeInteger"],
+  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\auto\\xsd\\unsignedLong"],
+  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\auto\\xsd\\unsignedInt"],
+  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort"],
+  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte"],
+  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger"],
+}
+
 def escape_id(s):
   s = re.sub('[^a-zA-Z0-9_\x7f-\xff\\\\]', '_', s)
   s = re.sub('([/\\\\])([0-9])', '\\1_\\2', s)
@@ -71,6 +95,8 @@ class Module:
     path = self.getNamespace().replace('\\','/');
     for v in self.classes.values():
       s = v.serialize()
+      if not s:
+        continue
       Path(path).mkdir(parents=True, exist_ok=True)
       with open(path+'/'+v.name+'.php', 'w') as f:
         print(s, file=f)
@@ -128,6 +154,8 @@ class Class:
       for t in getRdfObjectList(self.g, value):
         self.implements.append(self.module.registry.getOrCreateClass(t))
   def getAbsNS(self, t='I'):
+    if str(self.uri) in native_types:
+      return native_types[str(self.uri)][0]
     return '\\'+self.getNamespace()+'\\'+t+'_'+self.name
   def getConstituents(self):
     res = []
@@ -141,6 +169,8 @@ class Class:
     parts = [t.getAbsNS() for t in self.getConstituents()]
     return parts
   def serialize(self):
+    if self.uri in native_types:
+      return
     s = '<?php\n\n'
     s += 'declare(strict_types = 1);\n'
     s += 'namespace '+self.getNamespace()+';\n\n'
