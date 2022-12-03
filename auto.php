@@ -3,8 +3,6 @@
 declare(strict_types = 1);
 namespace auto;
 
-require 'xsd.php';
-
 spl_autoload_register(function($class_name){
   if(!str_starts_with($class_name, 'auto\\'))
     return;
@@ -14,12 +12,13 @@ spl_autoload_register(function($class_name){
     return;
   $namespace = implode('/', $parts);
   $file = $namespace . '/' . $name . '.php';
-  require_once $file;
+  if(file_exists($file))
+    require_once $file;
 });
 
 interface POJO extends \Serializable {
-  public function toArray() : array;
-  public function fromArray(array $data) : void;
+  public function toArray() : array|string;
+  public function fromArray(array|string $data) : void;
 }
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
@@ -29,6 +28,8 @@ class Property {
     public string $name
   ){}
 }
+
+require 'xsd.php';
 
 function lookup_type_by_iri($iri, $key=null){
   if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$iri,$result))
@@ -51,7 +52,11 @@ function lookup_type_by_iri($iri, $key=null){
 
 class ContextHelper {
   public $mapping = [];
-  public function __construct($context){
+  public function __construct($context=null){
+    if($context instanceof self){
+      $this->mapping = $context->mapping;
+      return;
+    }
     if(!$context)
       return;
     if(is_string($context))
@@ -92,6 +97,21 @@ class ContextHelper {
         return $v;
     }
   }
+
+  public static function merge(...$contexts){
+    $result = new ContextHelper();
+    foreach($contexts as $context){
+      $c = new ContextHelper($context);
+      foreach($c->mapping as $k => $e){
+        if(!isset($result->mapping[$k])){
+          $result->mapping[$k] = $e;
+          continue;
+        }
+        $result->mapping[$k] = array_merge($result->mapping[$k], $e);
+      }
+    }
+    return $result;
+  }
 }
 
 function getAllParents($reflection, &$list=[]){
@@ -126,6 +146,11 @@ function toArrayHelper(POJO $o) : array {
       if($value instanceof POJO){
         $result[$entry->name] = toArrayHelper($value);
       }else{
+        if(is_array($value) && isset($value[0])){
+          foreach($value as &$v)
+            if($v instanceof POJO)
+              $v = toArrayHelper($v);
+        }
         $result[$entry->name] = $value;
       }
     }
@@ -135,19 +160,49 @@ function toArrayHelper(POJO $o) : array {
   return $result;
 }
 
-function fromArrayHelper(POJO $o, array $a) : void {
+function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
+  if(!$context)
+    $context = ContextHelper::merge(@$a['@context'], $o::IRI);
+  $result = [];
+  foreach(getAllParents(get_class($o)) as $reflection){
+    $info = [];
+    foreach($reflection->getMethods() as $entry){
+      if(!($attr = @$entry->getAttributes(Property::class)[0]))
+        continue;
+      if(!($name = @explode('_', $entry->getName(), 2)[1]))
+        continue;
+      if(isset($info[$name]))
+        continue;
+      $info[$name] = $attr->newInstance();
+    }
+    foreach($info as $key => $entry){
+      if(!isset($a[$entry->name]))
+        continue;
+      $value = $a[$entry->name];
+      if(is_array($value)){
+        if(isset($value[0])){
+          foreach($value as &$v)
+            if(is_array($v))
+              $v = fromArray($v, $context);
+        }else{
+          $value = fromArray($value, $context);
+        }
+      }
+      $o->{'set_'.$key}($value);
+    }
+  }
 }
 
-function fromArray(array $a) : ?POJO {
+function fromArray(array $a, $context=null) : ?POJO {
   $type = @$a['type'];
   if(!is_string($type))
     return null;
-  $context = new ContextHelper(@$a['@context']);
+  $context = ContextHelper::merge(@$a['@context'], $context);
   $class = $context->lookup($type);
   if(!$class)
     return null;
   $pojo = new $class();
-  fromArrayHelper($pojo, $a);
+  fromArrayHelper($pojo, $a, $context);
   return $pojo;
 }
 
@@ -163,23 +218,60 @@ function unserialize(string $s) : ?POJO {
   return fromArray(json_decode($s,true));
 }
 
-function array_flatten(array $x) : array {
-  if(count($x) == 1 && $x[0] === null)
-    return [];
-  return iterator_to_array(
-    new RecursiveIteratorIterator(new RecursiveArrayIterator($x)),
-    false
-  );
+function deser($v, array $a=[]){
+  if(!is_string($v) || !count($a))
+    return $v;
+  try {
+    foreach($a as $class)
+      return new $class($v);
+  } catch(Exception $e) {}
+  throw new Exception("Failed to convert string ".json_encode($v)." to any of ".json_encode($a));
+}
+
+function array_flatten(array $x, array $expand=[]) : array {
+  $res = [];
+  foreach($x as $vs){
+    if($vs === null)
+      continue;
+    if(!is_array($vs) || (!isset($vs[0]) && count($vs))){
+      $res[] = $vs;
+      continue;
+    }
+    foreach(array_flatten($vs) as $v)
+      $res[] = $v;
+  }
+  if(count($expand))
+    foreach($res as &$v)
+      $v = deser($v,$expand);
+  return $res;
 }
 
 $person = new \auto\www_w3_org\ns\activitystreams\C_Person();
 $person->set_preferredUsername("Hello World!");
+$image_1 = new \auto\www_w3_org\ns\activitystreams\C_Link();
+$image_1->set_href("https://dpa.li/avatar.png");
+$image_2 = new \auto\www_w3_org\ns\activitystreams\C_Link();
+$image_2->set_href("https://dpa.li/avatar.png");
+$person->add_image($image_1,$image_2);
+//$person->add_image();
 echo $person->serialize() . "\n";
 
 print_r(unserialize('
 {
   "@context": "http://www.w3.org/ns/activitystreams",
   "type": "Person",
-  "preferredUsername": "Hello World!"
+  "preferredUsername": "Hello World!",
+  "image": [
+    {
+      "@context": "http://www.w3.org/ns/activitystreams",
+      "type": "Link",
+      "href": "https://dpa.li/avatar.png"
+    },
+    {
+      "@context": "http://www.w3.org/ns/activitystreams",
+      "type": "Link",
+      "href": "https://dpa.li/avatar.png"
+    }
+  ]
 }
 ')->serialize()."\n");

@@ -17,27 +17,29 @@ owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty
 wrapper = textwrap.TextWrapper(width=80-5)
 
 native_types = {
-  "http://www.w3.org/2001/XMLSchema#string": ["string",None],
-  "http://www.w3.org/2001/XMLSchema#normalizedString": ["string",None],
-  "http://www.w3.org/2001/XMLSchema#decimal": ["float",None],
-  "http://www.w3.org/2001/XMLSchema#float": ["float",None],
-  "http://www.w3.org/2001/XMLSchema#double": ["float",None],
-  "http://www.w3.org/2001/XMLSchema#integer": ["int",None],
-  "http://www.w3.org/2001/XMLSchema#boolean": ["bool",None],
-  "http://www.w3.org/2001/XMLSchema#base64Binary": ["string",None],
-  "http://www.w3.org/2001/XMLSchema#hexBinary": ["string",None],
-  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\auto\\xsd\\nonPositiveInteger"],
-  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\auto\\xsd\\negativeInteger"],
-  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\auto\\xsd\\long"],
-  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\auto\\xsd\\int"],
-  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\auto\\xsd\\short"],
-  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\auto\\xsd\\byte"],
-  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\auto\\xsd\\nonNegativeInteger"],
-  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\auto\\xsd\\unsignedLong"],
-  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\auto\\xsd\\unsignedInt"],
-  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort"],
-  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte"],
-  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger"],
+  "http://www.w3.org/2001/XMLSchema#string": ["string",None,None],
+  "http://www.w3.org/2001/XMLSchema#normalizedString": ["string",None,None],
+  "http://www.w3.org/2001/XMLSchema#decimal": ["float",None,None],
+  "http://www.w3.org/2001/XMLSchema#float": ["float",None,None],
+  "http://www.w3.org/2001/XMLSchema#double": ["float",None,None],
+  "http://www.w3.org/2001/XMLSchema#integer": ["int",None,None],
+  "http://www.w3.org/2001/XMLSchema#boolean": ["bool",None,None],
+  "http://www.w3.org/2001/XMLSchema#base64Binary": ["string",None,None],
+  "http://www.w3.org/2001/XMLSchema#hexBinary": ["string",None,None],
+  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\auto\\xsd\\nonPositiveInteger",None],
+  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\auto\\xsd\\negativeInteger",None],
+  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\auto\\xsd\\long",None],
+  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\auto\\xsd\\int",None],
+  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\auto\\xsd\\short",None],
+  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\auto\\xsd\\byte",None],
+  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\auto\\xsd\\nonNegativeInteger",None],
+  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\auto\\xsd\\unsignedLong",None],
+  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\auto\\xsd\\unsignedInt",None],
+  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort",None],
+  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",None],
+  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",None],
+  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", None, "\\auto\\xsd\\C_DateTime"],
+  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\xsd\\C_URI", None, "\\auto\\xsd\\C_URI"],
 }
 
 def escape_id(s):
@@ -92,7 +94,7 @@ class Module:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def serialize(self):
-    path = self.getNamespace().replace('\\','/');
+    path = self.getNamespace().replace('\\','/')
     for v in self.classes.values():
       s = v.serialize()
       if not s:
@@ -142,31 +144,42 @@ class Class:
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#subClassOf'):
       self.implements.append(self.module.registry.getOrCreateClass(value))
     elif key == URIRef('http://www.w3.org/2002/07/owl#unionOf'):
-      self.kind = 'union';
+      self.kind = 'union'
       for t in getRdfObjectList(self.g, value):
         self.implements.append(self.module.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#intersectionOf'):
-      self.kind = 'intersection';
+      self.kind = 'intersection'
       for t in getRdfObjectList(self.g, value):
         self.implements.append(self.module.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#complementOf'):
-      self.kind = 'complement';
+      self.kind = 'complement'
       for t in getRdfObjectList(self.g, value):
         self.implements.append(self.module.registry.getOrCreateClass(t))
   def getAbsNS(self, t='I'):
-    if str(self.uri) in native_types:
+    if str(self.uri) in native_types and native_types[str(self.uri)][0]:
       return native_types[str(self.uri)][0]
     return '\\'+self.getNamespace()+'\\'+t+'_'+self.name
   def getConstituents(self):
-    res = []
+    res = set()
     if   self.kind == 'class':
-      res += [self]
+      res.add(self)
+      if str(self.uri) in native_types and native_types[str(self.uri)][2]:
+        res.add(self.module.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string')))
     elif self.kind == 'union':
       for t in self.implements:
-        res += t.getConstituents()
+        res |= t.getConstituents()
+    return res
+  def getInstTypes(self):
+    res = set()
+    if   self.kind == 'class':
+      if str(self.uri) in native_types and native_types[str(self.uri)][2]:
+        res.add(native_types[str(self.uri)][2])
+    elif self.kind == 'union':
+      for t in self.implements:
+        res |= t.getInstTypes()
     return res
   def genTypeConstraint(self):
-    parts = [t.getAbsNS() for t in self.getConstituents()]
+    parts = set(t.getAbsNS() for t in self.getConstituents())
     return parts
   def serialize(self):
     if self.uri in native_types:
@@ -195,12 +208,12 @@ class Class:
       s += '  #[\\auto\\Property('+json.dumps(property.uri)+','+json.dumps(property.name)+')]\n'
       s += '  public function get_'+name+'()'
       if t:
-        s += ' : ' + t;
+        s += ' : ' + t
       s += ';\n'
       s += '  public function set_'+name+'('+tv+' $value);\n'
       if property.isArray():
-        s += '  public function add_'+name+'('+tv+' $value);\n';
-        s += '  public function del_'+name+'('+tv+' $value);\n';
+        s += '  public function add_'+name+'('+tv+' $value);\n'
+        s += '  public function del_'+name+'('+tv+' $value);\n'
       s += '\n'
     s += '}\n\n'
     s += 'class C_'+self.name+' implements I_'+self.name+' {\n'
@@ -220,19 +233,24 @@ class Class:
       if t:
         s += ' : ' + t + ' '
       s += '{ return $this->var_'+name+'; }\n'
-      s += '  public function set_'+name+'('+tv+' $value){ $this->var_'+name+' = ';
+      s += '  public function set_'+name+'('+tv+' $value){ $this->var_'+name+' = '
+      types = [*property.type.getInstTypes()]
+      ser = json.dumps(types)
       if property.isArray():
-        s += 'array_flatten($value)';
+        s += '\\auto\\array_flatten($value,'+ser+')'
       else:
-        s += '$value';
+        if len(types):
+          s += '\\auto\\deser($value,'+ser+')'
+        else:
+          s += '$value'
       s += '; }\n'
       if property.isArray():
-        s += '  public function add_'+name+'('+tv+' $value){ $this->var_'+name+' = array_merge($this->var_'+name+', array_flatten($value)); }\n';
-        s += '  public function del_'+name+'('+tv+' $value){ $this->var_'+name+' = array_diff($this->var_'+name+', array_flatten($value)); }\n';
+        s += '  public function add_'+name+'('+tv+' $value){ $this->var_'+name+' = array_merge($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
+        s += '  public function del_'+name+'('+tv+' $value){ $this->var_'+name+' = array_diff ($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
       s += '\n'
     s += """\
   public function toArray() : array { return \\auto\\toArrayHelper($this); }
-  public function fromArray(array $data) : void { \\auto\\fromArrayHelper($this, $data); }
+  public function fromArray(array|string $data) : void { \\auto\\fromArrayHelper($this, $data); }
   public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
   public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }
 """
@@ -279,7 +297,7 @@ class Property:
       return None
     parts = self.type.genTypeConstraint()
     if self.nullable:
-      parts.append('null')
+      parts.add('null')
     res = '|'.join(parts)
     if self.isArray():
       if varadic:

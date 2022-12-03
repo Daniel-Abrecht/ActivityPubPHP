@@ -61,3 +61,7 @@ function v_byte(int $x) : void {
   if($x >= -0x80 && x <= 0x7F)
     throw new TypeError("byte: value must be >= -0x80 and <= 0xFF");
 }
+
+class C_URI {
+  function __construct(public string $scalar){}
+}
