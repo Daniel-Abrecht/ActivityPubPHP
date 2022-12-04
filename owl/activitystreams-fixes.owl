@@ -21,7 +21,9 @@
 # While I'm at it, let's specify what the jsonld @context is going to be
 ###
 
-as: a meta:nsinfo; meta:context "http://www.w3.org/ns/activitystreams" .
+as: a meta:nsinfo;
+  meta:context "http://www.w3.org/ns/activitystreams" ;
+  meta:typefield "type" .
 
 ###
 # Patching actor types to be of actor type

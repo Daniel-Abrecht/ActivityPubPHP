@@ -53,7 +53,7 @@ class Registry:
     self.module = { '': Module(self, '', None) }
   def getOrCreateModule(self, ns, context):
     if ns in self.module:
-      return self.module
+      return self.module[ns]
     m = Module(self, ns, context)
     self.module[ns] = m
     return m
@@ -88,18 +88,40 @@ class Module:
     self.registry = registry
     self.g = registry.g
     self.classes = {}
+    self.typefield = None
   def getNamespace(self):
     parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.uri)
     if not parts:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def serialize(self):
+    if len(self.classes) == 0:
+      return;
     path = self.getNamespace().replace('\\','/')
+    Path(path).mkdir(parents=True, exist_ok=True)
+    with open(path+'/__module__.php', 'w') as f:
+      s = """\
+<?php
+
+declare(strict_types = 1);
+namespace """+self.getNamespace()+""";
+
+class __module__ {
+  const META = [
+    "ID" => """+json.dumps(self.context)+""",
+    "PREFIX" => """+json.dumps(self.uri)+""",
+"""
+      if self.typefield:
+        s += '"TYPEFIELD" => ' + json.dumps(self.typefield) + ",\n"
+      s += """\
+  ];
+}
+"""
+      print(s, file=f)
     for v in self.classes.values():
       s = v.serialize()
       if not s:
         continue
-      Path(path).mkdir(parents=True, exist_ok=True)
       with open(path+'/'+v.name+'.php', 'w') as f:
         print(s, file=f)
 
@@ -194,7 +216,7 @@ class Class:
       s += ', '
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
     s += ' {\n'
-    s += '  const NS = '+json.dumps(self.module.context)+';\n'
+    s += '  const NS = \\'+self.module.getNamespace()+'\\__module__::META;\n'
     s += '  const TYPE = '+json.dumps(self.name)+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
     for name, property in self.property.items():
@@ -323,7 +345,9 @@ def createModule(files):
     context = None
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#context'), None)):
       context = o
-    r.getOrCreateModule(ns, context)
+    m = r.getOrCreateModule(ns, context)
+    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#typefield'), None)):
+      m.typefield = o
   for s, p, o in g.triples((None, RDF.type, owl_Class)):
     ci = r.getOrCreateClass(s)
     for s, p, o in g.triples((s, None, None)):

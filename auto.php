@@ -7,9 +7,14 @@ spl_autoload_register(function($class_name){
   if(!str_starts_with($class_name, 'auto\\'))
     return;
   $parts = explode('\\', $class_name);
-  $name = @explode('_', array_pop($parts), 2)[1];
-  if(!$name)
-    return;
+  $name = array_pop($parts);
+  if($name == '__module__'){
+    $name = '__module__';
+  }else{
+    $name = @explode('_', $name, 2)[1];
+    if(!$name)
+      return;
+  }
   $namespace = implode('/', $parts);
   $file = $namespace . '/' . $name . '.php';
   if(file_exists($file))
@@ -17,8 +22,13 @@ spl_autoload_register(function($class_name){
 });
 
 interface POJO extends \Serializable {
-  public function toArray() : array|string;
-  public function fromArray(array|string $data) : void;
+  public function toArray() : array;
+  public function fromArray(array $data) : void;
+}
+
+interface simple_type extends \Serializable {
+  function __construct(string $scalar);
+  function toString();
 }
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
@@ -50,8 +60,25 @@ function lookup_type_by_iri($iri, $key=null){
   return $path;
 }
 
+function lookup_context($uri){
+  if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$uri,$result))
+    return null;
+  if(!@$result[3])
+    return null;
+  $path = explode(@$result[2]?'/':':',$result[3]);
+  $path[] = '__module__';
+  $path = implode('\\',$path);
+  $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
+  $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path);
+  $path = '\auto\\' . $path;
+  if(!class_exists($path))
+    return null;
+  return $path::META;
+}
+
 class ContextHelper {
   public $mapping = [];
+  public $context = [];
   public function __construct($context=null){
     if($context instanceof self){
       $this->mapping = $context->mapping;
@@ -69,9 +96,13 @@ class ContextHelper {
     foreach($entry as $key => $value){
       if(!is_string($value))
         continue;
-      if(!isset($this->mapping[$key]))
-        $this->mapping[$key] = [];
-      $this->mapping[$key][] = $value;
+      if($key == '@id'){
+        $this->context[$value] = lookup_context($value);
+      }else{
+        if(!isset($this->mapping[$key]))
+          $this->mapping[$key] = [];
+        $this->mapping[$key][] = $value;
+      }
     }
   }
 
@@ -87,7 +118,9 @@ class ContextHelper {
         return lookup_type_by_iri($key);
       }
     }else{
-      $prefix = @$this->mapping['@id'];
+      $prefix = [];
+      foreach($this->context as $p)
+        $prefix[] = $p['PREFIX'];
       $ref = $key;
     }
     if($prefix)
@@ -109,6 +142,7 @@ class ContextHelper {
         }
         $result->mapping[$k] = array_merge($result->mapping[$k], $e);
       }
+      $result->context = array_merge($result->context, $c->context);
     }
     return $result;
   }
@@ -126,7 +160,7 @@ function getAllParents($reflection, &$list=[]){
   return $list;
 }
 
-function toArrayHelper(POJO $o) : array {
+function toArrayHelper(POJO $o, $old=null) : array {
   $result = [];
   foreach(getAllParents(get_class($o)) as $reflection){
     $info = [];
@@ -143,19 +177,22 @@ function toArrayHelper(POJO $o) : array {
       $value = $o->{'get_'.$key}();
       if($value === null || (is_array($value) && count($value) == 0))
         continue;
-      if($value instanceof POJO){
-        $result[$entry->name] = toArrayHelper($value);
-      }else{
-        if(is_array($value) && isset($value[0])){
-          foreach($value as &$v)
-            if($v instanceof POJO)
-              $v = toArrayHelper($v);
+      if(!is_array($value) || !isset($value[0]))
+        $value = [$value];
+      foreach($value as &$v){
+        if($v instanceof POJO){
+          $v = toArrayHelper($v, $o::NS['ID']);
+        }else if($v instanceof simple_type){
+          $v = $v->toString();
         }
-        $result[$entry->name] = $value;
       }
+      if(count($value) == 1)
+        $value = $value[0];
+      $result[$entry->name] = $value;
     }
-    $result['@context'] = $o::NS;
-    $result['type'] = $o::TYPE;
+    if($o::NS['ID'] != $old)
+      $result['@context'] = $o::NS['ID'];
+    $result[@$o::NS['TYPEFIELD'] ?? '@type'] = $o::TYPE;
   }
   return $result;
 }
@@ -176,9 +213,11 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
       $info[$name] = $attr->newInstance();
     }
     foreach($info as $key => $entry){
-      if(!isset($a[$entry->name]))
-        continue;
-      $value = $a[$entry->name];
+      if(isset($a[$entry->name])){
+        $value = $a[$entry->name];
+      }else if(isset($a[$entry->iri])){
+        $value = $a[$entry->iri];
+      }else continue;
       if(is_array($value)){
         if(isset($value[0])){
           foreach($value as &$v)
@@ -194,10 +233,18 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
 }
 
 function fromArray(array $a, $context=null) : ?POJO {
-  $type = @$a['type'];
+  $context = ContextHelper::merge(@$a['@context'], $context);
+  $typefields = ['@type'];
+  foreach($context->context as $c)
+    if(@$c['TYPEFIELD'])
+      $typefields[] = $c['TYPEFIELD'];
+  foreach($typefields as $typefield){
+    $type = @$a[$typefield];
+    if(is_string($type))
+      break;
+  }
   if(!is_string($type))
     return null;
-  $context = ContextHelper::merge(@$a['@context'], $context);
   $class = $context->lookup($type);
   if(!$class)
     return null;
@@ -245,33 +292,3 @@ function array_flatten(array $x, array $expand=[]) : array {
       $v = deser($v,$expand);
   return $res;
 }
-
-$person = new \auto\www_w3_org\ns\activitystreams\C_Person();
-$person->set_preferredUsername("Hello World!");
-$image_1 = new \auto\www_w3_org\ns\activitystreams\C_Link();
-$image_1->set_href("https://dpa.li/avatar.png");
-$image_2 = new \auto\www_w3_org\ns\activitystreams\C_Link();
-$image_2->set_href("https://dpa.li/avatar.png");
-$person->add_image($image_1,$image_2);
-//$person->add_image();
-echo $person->serialize() . "\n";
-
-print_r(unserialize('
-{
-  "@context": "http://www.w3.org/ns/activitystreams",
-  "type": "Person",
-  "preferredUsername": "Hello World!",
-  "image": [
-    {
-      "@context": "http://www.w3.org/ns/activitystreams",
-      "type": "Link",
-      "href": "https://dpa.li/avatar.png"
-    },
-    {
-      "@context": "http://www.w3.org/ns/activitystreams",
-      "type": "Link",
-      "href": "https://dpa.li/avatar.png"
-    }
-  ]
-}
-')->serialize()."\n");

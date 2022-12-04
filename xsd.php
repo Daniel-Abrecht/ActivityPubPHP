@@ -62,6 +62,9 @@ function v_byte(int $x) : void {
     throw new TypeError("byte: value must be >= -0x80 and <= 0xFF");
 }
 
-class C_URI {
-  function __construct(public string $scalar){}
+class C_URI implements \auto\simple_type {
+  public function __construct(public string $scalar){}
+  public function toString(){return $this->scalar;}
+  public function serialize() : string { return json_encode($this->scalar); }
+  public function unserialize(string $x) : void { $this->scalar = json_decode($x); }
 }
