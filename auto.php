@@ -82,6 +82,7 @@ class ContextHelper {
   public function __construct($context=null){
     if($context instanceof self){
       $this->mapping = $context->mapping;
+      $this->context = $context->context;
       return;
     }
     if(!$context)
@@ -224,16 +225,18 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
             if(is_array($v))
               $v = fromArray($v, $context);
         }else{
-          $value = fromArray($value, $context);
+          $value = [fromArray($value, $context)];
         }
+      }else{
+        $value = [$value];
       }
-      $o->{'set_'.$key}($value);
+      $o->{'set_'.$key}(...$value);
     }
   }
 }
 
 function fromArray(array $a, $context=null) : ?POJO {
-  $context = ContextHelper::merge(@$a['@context'], $context);
+  $context = ContextHelper::merge($context, @$a['@context']);
   $typefields = ['@type'];
   foreach($context->context as $c)
     if(@$c['TYPEFIELD'])

@@ -232,10 +232,10 @@ class Class:
       if t:
         s += ' : ' + t
       s += ';\n'
-      s += '  public function set_'+name+'('+tv+' $value);\n'
+      s += '  public function set_'+name+'('+tv+' $value) : void;\n'
       if property.isArray():
-        s += '  public function add_'+name+'('+tv+' $value);\n'
-        s += '  public function del_'+name+'('+tv+' $value);\n'
+        s += '  public function add_'+name+'('+tv+' $value) : void;\n'
+        s += '  public function del_'+name+'('+tv+' $value) : void;\n'
       s += '\n'
     s += '}\n\n'
     s += 'class C_'+self.name+' implements I_'+self.name+' {\n'
@@ -255,8 +255,8 @@ class Class:
       if t:
         s += ' : ' + t + ' '
       s += '{ return $this->var_'+name+'; }\n'
-      s += '  public function set_'+name+'('+tv+' $value){ $this->var_'+name+' = '
-      types = [*property.type.getInstTypes()]
+      s += '  public function set_'+name+'('+tv+' $value) : void { $this->var_'+name+' = '
+      types = sorted([*property.type.getInstTypes()])
       ser = json.dumps(types)
       if property.isArray():
         s += '\\auto\\array_flatten($value,'+ser+')'
@@ -267,8 +267,8 @@ class Class:
           s += '$value'
       s += '; }\n'
       if property.isArray():
-        s += '  public function add_'+name+'('+tv+' $value){ $this->var_'+name+' = array_merge($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
-        s += '  public function del_'+name+'('+tv+' $value){ $this->var_'+name+' = array_diff ($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
+        s += '  public function add_'+name+'('+tv+' $value) : void { $this->var_'+name+' = array_merge($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
+        s += '  public function del_'+name+'('+tv+' $value) : void { $this->var_'+name+' = array_diff ($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
       s += '\n'
     s += """\
   public function toArray() : array { return \\auto\\toArrayHelper($this); }
@@ -320,7 +320,7 @@ class Property:
     parts = self.type.genTypeConstraint()
     if self.nullable:
       parts.add('null')
-    res = '|'.join(parts)
+    res = '|'.join(sorted([*parts]))
     if self.isArray():
       if varadic:
         res += '|array...'
