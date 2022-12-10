@@ -38,8 +38,9 @@ native_types = {
   "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort",None],
   "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",None],
   "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",None],
-  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", None, "\\auto\\xsd\\C_DateTime"],
-  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\xsd\\C_URI", None, "\\auto\\xsd\\C_URI"],
+  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", None, "xsd.php"],
+  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\xsd\\I_anyURI", None, "xsd.php"],
+  "http://www.w3.org/ns/activitystreams#Link": ["\\auto\\www_w3_org\\ns\\activitystreams\\I_Link", None, "activitypub.php"],
 }
 
 def escape_id(s):
@@ -178,7 +179,7 @@ class Class:
       for t in getRdfObjectList(self.g, value):
         self.implements.append(self.module.registry.getOrCreateClass(t))
   def getAbsNS(self, t='I'):
-    if str(self.uri) in native_types and native_types[str(self.uri)][0]:
+    if t == 'I' and str(self.uri) in native_types and native_types[str(self.uri)][0]:
       return native_types[str(self.uri)][0]
     return '\\'+self.getNamespace()+'\\'+t+'_'+self.name
   def getConstituents(self):
@@ -195,7 +196,7 @@ class Class:
     res = set()
     if   self.kind == 'class':
       if str(self.uri) in native_types and native_types[str(self.uri)][2]:
-        res.add(native_types[str(self.uri)][2])
+        res.add(self.getAbsNS('C'))
     elif self.kind == 'union':
       for t in self.implements:
         res |= t.getInstTypes()
@@ -204,14 +205,19 @@ class Class:
     parts = set(t.getAbsNS() for t in self.getConstituents())
     return parts
   def serialize(self):
-    if self.uri in native_types:
+    nt = native_types.get(str(self.uri)) or [None, None, None]
+    if nt[0] and not nt[2]:
       return
     s = '<?php\n\n'
     s += 'declare(strict_types = 1);\n'
     s += 'namespace '+self.getNamespace()+';\n\n'
     if self.comment:
       s += '/**\n' + ''.join([f" * {s}\n" for s in wrapper.wrap(text='\n'.join(self.comment))]) + ' */\n'
-    s += 'interface I_'+self.name+' extends \\auto\\POJO'
+    if nt[2]:
+      s += 'interface D_'
+    else:
+      s += 'interface I_'
+    s += self.name+' extends \\auto\\POJO'
     if len(self.implements):
       s += ', '
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
@@ -238,7 +244,10 @@ class Class:
         s += '  public function del_'+name+'('+tv+' $value) : void;\n'
       s += '\n'
     s += '}\n\n'
-    s += 'class C_'+self.name+' implements I_'+self.name+' {\n'
+    if nt[2]:
+      s += 'abstract class A_' + self.name + ' implements D_' + self.name + ' {\n'
+    else:
+      s += 'class C_' + self.name + ' implements I_' + self.name + ' {\n'
     for name, property in self.getAllProperties().items():
       t  = ''
       tv = ''
@@ -271,12 +280,14 @@ class Class:
         s += '  public function del_'+name+'('+tv+' $value) : void { $this->var_'+name+' = array_diff ($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
       s += '\n'
     s += """\
-  public function toArray() : array { return \\auto\\toArrayHelper($this); }
+  public function toArray($oldns=null) : """+('string|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$oldns); }
   public function fromArray(array|string $data) : void { \\auto\\fromArrayHelper($this, $data); }
   public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
   public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }
 """
     s += '}\n'
+    if nt[2]:
+      s += '\\auto\\load(' + json.dumps(nt[2]) + ');';
     return s
   def getAllProperties(self):
     properties = {}

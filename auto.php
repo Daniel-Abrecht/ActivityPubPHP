@@ -3,6 +3,13 @@
 declare(strict_types = 1);
 namespace auto;
 
+const BASE = __DIR__;
+
+function load($file){
+  if(file_exists($file))
+    require_once $file;
+}
+
 spl_autoload_register(function($class_name){
   if(!str_starts_with($class_name, 'auto\\'))
     return;
@@ -17,12 +24,11 @@ spl_autoload_register(function($class_name){
   }
   $namespace = implode('/', $parts);
   $file = $namespace . '/' . $name . '.php';
-  if(file_exists($file))
-    require_once $file;
+  load($file);
 });
 
 interface POJO extends \Serializable {
-  public function toArray() : array;
+  public function toArray($oldns=null) : array|string;
   public function fromArray(array $data) : void;
 }
 
@@ -38,8 +44,6 @@ class Property {
     public string $name
   ){}
 }
-
-require 'xsd.php';
 
 function lookup_type_by_iri($iri, $key=null){
   if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$iri,$result))
@@ -182,7 +186,7 @@ function toArrayHelper(POJO $o, $old=null) : array {
         $value = [$value];
       foreach($value as &$v){
         if($v instanceof POJO){
-          $v = toArrayHelper($v, $o::NS['ID']);
+          $v = $v->toArray($v, $o::NS['ID']);
         }else if($v instanceof simple_type){
           $v = $v->toString();
         }
