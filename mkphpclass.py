@@ -280,7 +280,7 @@ class Class:
         s += '  public function del_'+name+'('+tv+' $value) : void { $this->var_'+name+' = array_diff ($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
       s += '\n'
     s += """\
-  public function toArray($oldns=null) : """+('string|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$oldns); }
+  public function toArray($oldns=null) : """+('string|null|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$oldns); }
   public function fromArray(array|string $data) : void { \\auto\\fromArrayHelper($this, $data); }
   public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
   public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }

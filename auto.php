@@ -28,13 +28,13 @@ spl_autoload_register(function($class_name){
 });
 
 interface POJO extends \Serializable {
-  public function toArray($oldns=null) : array|string;
+  public function toArray($oldns=null) : array|string|null;
   public function fromArray(array $data) : void;
 }
 
 interface simple_type extends \Serializable {
   function __construct(string $scalar);
-  function toString();
+  function toString() : string|null;
 }
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
