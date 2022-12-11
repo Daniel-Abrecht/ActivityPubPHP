@@ -1,5 +1,5 @@
 
-OWLS=$(wildcard owl/*.owl)
+OWLS=$(wildcard vocab/*)
 
 all: auto/.done
 

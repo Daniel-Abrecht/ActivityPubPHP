@@ -5,9 +5,11 @@ import json
 import textwrap
 from pathlib import Path
 from rdflib import RDF, Graph, URIRef
+from itertools import chain
 
 rdf_domain = URIRef('http://www.w3.org/2000/01/rdf-schema#domain')
 owl_Class = URIRef("http://www.w3.org/2002/07/owl#Class")
+rdfs_Class = URIRef("http://www.w3.org/2000/01/rdf-schema#Class")
 owl_DatatypeProperty = URIRef("http://www.w3.org/2002/07/owl#DatatypeProperty")
 owl_ObjectProperty = URIRef("http://www.w3.org/2002/07/owl#ObjectProperty")
 owl_FunctionalProperty = URIRef("http://www.w3.org/2002/07/owl#FunctionalProperty")
@@ -265,7 +267,9 @@ class Class:
         s += ' : ' + t + ' '
       s += '{ return $this->var_'+name+'; }\n'
       s += '  public function set_'+name+'('+tv+' $value) : void { $this->var_'+name+' = '
-      types = sorted([*property.type.getInstTypes()])
+      types = []
+      if property.type:
+        types = sorted([*property.type.getInstTypes()])
       ser = json.dumps(types)
       if property.isArray():
         s += '\\auto\\array_flatten($value,'+ser+')'
@@ -359,7 +363,8 @@ def createModule(files):
     m = r.getOrCreateModule(ns, context)
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#typefield'), None)):
       m.typefield = o
-  for s, p, o in g.triples((None, RDF.type, owl_Class)):
+  for s, p, o in chain(g.triples((None, RDF.type, owl_Class)),
+                       g.triples((None, RDF.type, rdfs_Class))):
     ci = r.getOrCreateClass(s)
     for s, p, o in g.triples((s, None, None)):
       ci.setMeta(p, o)
