@@ -1,4 +1,4 @@
-@prefix sec: <https://w3id.org/security/v1> .
+@prefix sec: <https://w3id.org/security#> .
 @prefix cred: <https://w3.org/2018/credentials#> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .

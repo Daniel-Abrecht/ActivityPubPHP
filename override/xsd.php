@@ -1,4 +1,31 @@
 <?php
+declare(strict_types = 1);
+/* override: {
+  "http://www.w3.org/2001/XMLSchema#string": ["string",null,null],
+  "http://www.w3.org/2001/XMLSchema#normalizedString": ["string",null,null],
+  "http://www.w3.org/2001/XMLSchema#decimal": ["float",null,null],
+  "http://www.w3.org/2001/XMLSchema#float": ["float",null,null],
+  "http://www.w3.org/2001/XMLSchema#double": ["float",null,null],
+  "http://www.w3.org/2001/XMLSchema#integer": ["int",null,null],
+  "http://www.w3.org/2001/XMLSchema#boolean": ["bool",null,null],
+  "http://www.w3.org/2001/XMLSchema#base64Binary": ["string",null,null],
+  "http://www.w3.org/2001/XMLSchema#hexBinary": ["string",null,null],
+  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\auto\\xsd\\nonPositiveInteger",null],
+  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\auto\\xsd\\negativeInteger",null],
+  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\auto\\xsd\\long",null],
+  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\auto\\xsd\\int",null],
+  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\auto\\xsd\\short",null],
+  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\auto\\xsd\\byte",null],
+  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\auto\\xsd\\nonNegativeInteger",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\auto\\xsd\\unsignedLong",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\auto\\xsd\\unsignedInt",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",null],
+  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",null],
+  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", null, "override/xsd.php"],
+  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\xsd\\I_anyURI", null, "override/xsd.php"]
+}
+*/
 
 namespace auto\xsd {
 

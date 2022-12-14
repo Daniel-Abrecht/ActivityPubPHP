@@ -97,6 +97,7 @@ class ContextHelper {
     foreach($context as &$value)
       if(!is_array($value))
         $value = ['@id' => $value];
+    print_r($context);
     foreach($context as $entry)
     foreach($entry as $key => $value){
       if(!is_string($value))

@@ -18,32 +18,8 @@ owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty
 
 wrapper = textwrap.TextWrapper(width=80-5)
 
-native_types = {
-  "http://www.w3.org/2001/XMLSchema#string": ["string",None,None],
-  "http://www.w3.org/2001/XMLSchema#normalizedString": ["string",None,None],
-  "http://www.w3.org/2001/XMLSchema#decimal": ["float",None,None],
-  "http://www.w3.org/2001/XMLSchema#float": ["float",None,None],
-  "http://www.w3.org/2001/XMLSchema#double": ["float",None,None],
-  "http://www.w3.org/2001/XMLSchema#integer": ["int",None,None],
-  "http://www.w3.org/2001/XMLSchema#boolean": ["bool",None,None],
-  "http://www.w3.org/2001/XMLSchema#base64Binary": ["string",None,None],
-  "http://www.w3.org/2001/XMLSchema#hexBinary": ["string",None,None],
-  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\auto\\xsd\\nonPositiveInteger",None],
-  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\auto\\xsd\\negativeInteger",None],
-  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\auto\\xsd\\long",None],
-  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\auto\\xsd\\int",None],
-  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\auto\\xsd\\short",None],
-  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\auto\\xsd\\byte",None],
-  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\auto\\xsd\\nonNegativeInteger",None],
-  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\auto\\xsd\\unsignedLong",None],
-  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\auto\\xsd\\unsignedInt",None],
-  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort",None],
-  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",None],
-  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",None],
-  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", None, "xsd.php"],
-  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\xsd\\I_anyURI", None, "xsd.php"],
-  "http://www.w3.org/ns/activitystreams#Link": ["\\auto\\www_w3_org\\ns\\activitystreams\\I_Link", None, "activitypub.php"],
-}
+with open("auto/override_meta.json",'r') as f:
+  native_types = json.load(f)
 
 def escape_id(s):
   s = re.sub('[^a-zA-Z0-9_\x7f-\xff\\\\]', '_', s)
@@ -97,12 +73,19 @@ class Module:
     if not parts:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
+  def getContextNamespace(self):
+    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.context)
+    if not parts:
+      return 'auto\\anonymous'
+    return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def serialize(self):
     if len(self.classes) == 0:
       return;
     path = self.getNamespace().replace('\\','/')
     Path(path).mkdir(parents=True, exist_ok=True)
-    with open(path+'/__module__.php', 'w') as f:
+    contextPath = self.getContextNamespace().replace('\\','/')
+    Path(contextPath).mkdir(parents=True, exist_ok=True)
+    with open(contextPath+'/__module__.php', 'w') as f:
       s = """\
 <?php
 
@@ -115,7 +98,7 @@ class __module__ {
     "PREFIX" => """+json.dumps(self.uri)+""",
 """
       if self.typefield:
-        s += '"TYPEFIELD" => ' + json.dumps(self.typefield) + ",\n"
+        s += '    "TYPEFIELD" => ' + json.dumps(self.typefield) + ",\n"
       s += """\
   ];
 }
@@ -207,6 +190,8 @@ class Class:
     parts = set(t.getAbsNS() for t in self.getConstituents())
     return parts
   def serialize(self):
+    if self.kind != 'class':
+      return
     nt = native_types.get(str(self.uri)) or [None, None, None]
     if nt[0] and not nt[2]:
       return

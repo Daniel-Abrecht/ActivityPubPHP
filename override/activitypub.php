@@ -1,5 +1,10 @@
 <?php
 declare(strict_types = 1);
+/* override: {
+  "http://www.w3.org/ns/activitystreams#Link": ["\\auto\\www_w3_org\\ns\\activitystreams\\I_Link", null, "override/activitypub.php"]
+}
+*/
+
 
 namespace auto\www_w3_org\ns\activitystreams {
   interface I_Link extends D_Link, \auto\simple_type {}
