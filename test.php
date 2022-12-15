@@ -40,3 +40,31 @@ print_r(\auto\unserialize('
   }
 }
 ')->serialize()."\n");
+
+print_r(\auto\unserialize('
+{
+  "@context": [
+    "https://www.w3.org/ns/activitystreams",
+    {
+      "toot": "http://joinmastodon.org/ns#",
+      "Emoji": "toot:Emoji"
+    }
+  ],
+
+  "id": "https://example.com/@alice/hello-world",
+  "type": "Note",
+  "content": "Hello world :kappa:",
+  "tag": [
+    {
+      "id": "https://example.com/emoji/123",
+      "type": "Emoji",
+      "name": ":kappa:",
+      "icon": {
+        "type": "Image",
+        "mediaType": "image/png",
+        "url": "https://example.com/files/kappa.png"
+      }
+    }
+  ]
+}
+')->serialize()."\n");

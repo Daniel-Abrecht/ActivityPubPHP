@@ -13,4 +13,10 @@
 
 sec: a meta:nsinfo;
   meta:context "https://w3id.org/security/v1" ;
-  meta:typefield "type" .
+  meta:typefield "type" ;
+.
+
+sec:owner
+  rdfs:domain sec:Key ;
+  rdfs:range xsd:anyURI ;
+.

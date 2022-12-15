@@ -23,7 +23,8 @@
 
 as: a meta:nsinfo;
   meta:context "https://www.w3.org/ns/activitystreams" ;
-  meta:typefield "type" .
+  meta:typefield "type" ;
+.
 
 ###
 # Patching actor types to be of actor type
@@ -42,7 +43,8 @@ as:Organization a owl:Class ; rdfs:subClassOf fix:Actor .
 fix:Actor a owl:Class ;
   rdfs:label "Actor"@en ;
 #  rdfs:subClassOf as:Object ;
-  rdfs:comment "An actor which can be interacterd with"@en .
+  rdfs:comment "An actor which can be interacterd with"@en ;
+.
 
 fix:inbox a owl:DatatypeProperty;
   rdfs:label "inbox"@en ;
@@ -51,7 +53,8 @@ fix:inbox a owl:DatatypeProperty;
     a owl:Class ;
     owl:unionOf ( as:OrderedCollection as:Link )
   ] ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:outbox a owl:DatatypeProperty;
   rdfs:label "outbox"@en ;
@@ -60,7 +63,8 @@ fix:outbox a owl:DatatypeProperty;
     a owl:Class ;
     owl:unionOf ( as:OrderedCollection as:Link )
   ] ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:following a owl:DatatypeProperty;
   rdfs:label "following"@en ;
@@ -69,7 +73,8 @@ fix:following a owl:DatatypeProperty;
     a owl:Class ;
     owl:unionOf ( as:Collection as:Link )
   ] ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:followers a owl:DatatypeProperty;
   rdfs:label "followers"@en ;
@@ -78,7 +83,8 @@ fix:followers a owl:DatatypeProperty;
     a owl:Class ;
     owl:unionOf ( as:Collection as:Link )
   ] ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:liked a owl:DatatypeProperty;
   rdfs:label "liked"@en ;
@@ -87,7 +93,8 @@ fix:liked a owl:DatatypeProperty;
     a owl:Class ;
     owl:unionOf ( as:OrderedCollection as:Link )
   ] ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:streams a owl:ObjectProperty;
   rdfs:label "streams"@en ;
@@ -96,13 +103,15 @@ fix:streams a owl:ObjectProperty;
     a owl:Class ;
     owl:unionOf ( as:Collection as:Link )
   ] ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:preferredUsername a owl:DatatypeProperty;
   rdfs:label "preferredUsername"@en ;
   rdfs:comment "A short username which may be used to refer to the actor, with no uniqueness guarantees."@en ;
   rdfs:range xsd:string ;
-  rdfs:domain fix:Actor .
+  rdfs:domain fix:Actor ;
+.
 
 fix:endpoints a owl:DatatypeProperty;
   rdfs:label "endpoints"@en ;
@@ -115,40 +124,47 @@ fix:endpoints a owl:DatatypeProperty;
 
 fix:Endpoint a owl:Class ;
   rdfs:label "Endpoint"@en ;
-  rdfs:comment "A json object which maps additional (typically server/domain-wide) endpoints"@en .
+  rdfs:comment "A json object which maps additional (typically server/domain-wide) endpoints"@en ;
+.
 
 fix:proxyUrl a owl:DatatypeProperty;
   rdfs:label "proxyUrl"@en ;
   rdfs:range xsd:string ;
   rdfs:comment "Endpoint URI so this actor's clients may access remote ActivityStreams objects which require authentication to access. To use this endpoint, the client posts an x-www-form-urlencoded id parameter with the value being the id of the requested ActivityStreams object."@en ;
-  rdfs:domain fix:Endpoint .
+  rdfs:domain fix:Endpoint ;
+.
 
 fix:oauthAuthorizationEndpoint a owl:DatatypeProperty;
   rdfs:label "oauthAuthorizationEndpoint"@en ;
   rdfs:range xsd:string ;
   rdfs:comment "If OAuth 2.0 bearer tokens [RFC6749] [RFC6750] are being used for authenticating client to server interactions, this endpoint specifies a URI at which a browser-authenticated user may obtain a new authorization grant."@en ;
-  rdfs:domain fix:Endpoint .
+  rdfs:domain fix:Endpoint ;
+.
 
 fix:oauthTokenEndpoint a owl:DatatypeProperty;
   rdfs:label "oauthTokenEndpoint"@en ;
   rdfs:range xsd:string ;
   rdfs:comment "If OAuth 2.0 bearer tokens [RFC6749] [RFC6750] are being used for authenticating client to server interactions, this endpoint specifies a URI at which a client may acquire an access token."@en ;
-  rdfs:domain fix:Endpoint .
+  rdfs:domain fix:Endpoint ;
+.
 
 fix:provideClientKey a owl:DatatypeProperty;
   rdfs:label "provideClientKey"@en ;
   rdfs:range xsd:string ;
   rdfs:comment "If Linked Data Signatures and HTTP Signatures are being used for authentication and authorization, this endpoint specifies a URI at which browser-authenticated users may authorize a client's public key for client to server interactions."@en ;
-  rdfs:domain fix:Endpoint .
+  rdfs:domain fix:Endpoint ;
+.
 
 fix:signClientKey a owl:DatatypeProperty;
   rdfs:label "signClientKey"@en ;
   rdfs:range xsd:string ;
   rdfs:comment "If Linked Data Signatures and HTTP Signatures are being used for authentication and authorization, this endpoint specifies a URI at which a client key may be signed by the actor's key for a time window to act on behalf of the actor in interacting with foreign servers."@en ;
-  rdfs:domain fix:Endpoint .
+  rdfs:domain fix:Endpoint ;
+.
 
 fix:sharedInbox a owl:DatatypeProperty;
   rdfs:label "sharedInbox"@en ;
   rdfs:range xsd:string ;
   rdfs:comment "An optional endpoint used for wide delivery of publicly addressed activities and activities sent to followers. sharedInbox endpoints SHOULD also be publicly readable OrderedCollection objects containing objects addressed to the Public special collection. Reading from the sharedInbox endpoint MUST NOT present objects which are not addressed to the Public endpoint."@en ;
-  rdfs:domain fix:Endpoint .
+  rdfs:domain fix:Endpoint ;
+.

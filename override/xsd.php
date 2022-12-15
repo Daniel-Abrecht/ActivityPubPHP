@@ -1,6 +1,7 @@
 <?php
 declare(strict_types = 1);
 /* override: {
+  "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString": ["string",null,null],
   "http://www.w3.org/2001/XMLSchema#string": ["string",null,null],
   "http://www.w3.org/2001/XMLSchema#normalizedString": ["string",null,null],
   "http://www.w3.org/2001/XMLSchema#decimal": ["float",null,null],
@@ -98,7 +99,7 @@ namespace auto\www_w3_org\_2001\XMLSchema {
   class C_anyURI extends A_anyURI implements I_anyURI {
     public function __construct(public string $scalar){}
     public function toArray($oldns=null) : string { return $this->scalar; }
-    public function toString() : string { return $this->scalar; }
+    public function __toString() : string { return $this->scalar === null ? '' : $this->scalar; }
     public function serialize() : string { return json_encode($this->scalar); }
     public function unserialize(string $x) : void { $this->scalar = json_decode($x); }
   }

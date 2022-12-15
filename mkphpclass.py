@@ -90,7 +90,7 @@ class Module:
 <?php
 
 declare(strict_types = 1);
-namespace """+self.getNamespace()+""";
+namespace """+self.getContextNamespace()+""";
 
 class __module__ {
   const META = [
@@ -209,7 +209,7 @@ class Class:
       s += ', '
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
     s += ' {\n'
-    s += '  const NS = \\'+self.module.getNamespace()+'\\__module__::META;\n'
+    s += '  const NS = \\'+self.module.getContextNamespace()+'\\__module__::META;\n'
     s += '  const TYPE = '+json.dumps(self.name)+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
     for name, property in self.property.items():
@@ -220,7 +220,9 @@ class Class:
       if property.type:
         t  = property.genTypeConstraint()
         tv = property.genTypeConstraint(True)
-      s += '  #[\\auto\\Property('+json.dumps(property.uri)+','+json.dumps(property.name)+')]\n'
+      st = property.getType()
+      st = ',' + json.dumps(st.uri) if st else ''
+      s += '  #[\\auto\\Property('+json.dumps(property.uri)+','+json.dumps(property.name)+st+')]\n'
       s += '  public function get_'+name+'()'
       if t:
         s += ' : ' + t
@@ -329,6 +331,11 @@ class Property:
     return res
   def isArray(self):
     return not self.datatypeproperty
+  # If it can be only 1 type, return it
+  def getType(self):
+    if self.type and self.type.kind == 'class':
+      return self.type
+    return None
 
 def getTypeOfProperty(r,g,s,p):
   for s, p, o in g.triples((s, p, None)):

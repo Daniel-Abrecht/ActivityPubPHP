@@ -2,14 +2,69 @@
 @prefix as: <http://www.w3.org/ns/activitystreams#> .
 @prefix fix: <http://dpa.li/ns/owl/fixes/activitystreams#> .
 @prefix ext: <http://dpa.li/ns/owl/extension/activitystreams#> .
-@prefix sec: <https://w3id.org/security/v1#> .
+@prefix sec: <https://w3id.org/security#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xml: <http://www.w3.org/XML/1998/namespace> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix toot: <http://joinmastodon.org/ns#> .
 @base <http://dpa.li/ns/owl/extension/activitystreams#> .
 
+# Mastodon related
+
+toot:Emoji a owl:Class;
+  rdfs:subClassOf as:Object ;
+.
+
+toot:blurhash a owl:DatatypeProperty;
+  rdfs:label "blurhash"@en ;
+  rdfs:domain as:Object ;
+  rdfs:range xsd:string ;
+.
+
+toot:focalPoint a owl:ObjectProperty;
+  rdfs:label "focalPoint"@en ;
+  rdfs:domain as:Object ;
+  rdfs:range xsd:float ;
+.
+
+toot:featured a owl:DatatypeProperty;
+  rdfs:label "featured"@en ;
+  rdfs:domain as:Object ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:Collection as:Link )
+  ] ;
+.
+
+toot:featuredTags a owl:DatatypeProperty;
+  rdfs:label "featuredTags"@en ;
+  rdfs:domain as:Object ;
+  rdfs:range [
+    a owl:Class ;
+    owl:unionOf ( as:Collection as:Link )
+  ] ;
+.
+
+toot:discoverable a owl:DatatypeProperty;
+  rdfs:label "discoverable"@en ;
+  rdfs:domain as:Object ;
+  rdfs:range xsd:boolean ;
+.
+
+toot:suspended a owl:DatatypeProperty;
+  rdfs:label "suspended"@en ;
+  rdfs:domain as:Actor ;
+  rdfs:range xsd:boolean ;
+.
+
+# Not sure where to put this:
+# toot:votersCount a owl:DatatypeProperty .
+
+
+# There is a publicKey property in sec: but it's rdfs:domain is Key,
+# and it has no rdfs:range, so it's a property of Key, and not of type Key, and misused in mastodon.
 fix:publicKey a owl:DatatypeProperty;
   rdfs:label "publicKey"@en ;
   rdfs:comment "The public key for verifying signed messages"@en ;

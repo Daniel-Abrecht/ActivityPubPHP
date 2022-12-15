@@ -1,5 +1,9 @@
 <?php
 
+// Note: a lot of things are wrong here.
+// Do not worry about that, all the ActivityPub related specs are a giant clusterfuck anyway,
+// you can only make things work, you can't make them work correctly.
+
 declare(strict_types = 1);
 namespace auto;
 
@@ -32,16 +36,16 @@ interface POJO extends \Serializable {
   public function fromArray(array $data) : void;
 }
 
-interface simple_type extends \Serializable {
+interface simple_type extends \Serializable, \Stringable {
   function __construct(string $scalar);
-  function toString() : string|null;
 }
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
 class Property {
   function __construct(
     public string $iri,
-    public string $name
+    public string $name,
+    public string|null $defaultType = null
   ){}
 }
 
@@ -97,11 +101,16 @@ class ContextHelper {
     foreach($context as &$value)
       if(!is_array($value))
         $value = ['@id' => $value];
-    print_r($context);
+    unset($value);
     foreach($context as $entry)
     foreach($entry as $key => $value){
-      if(!is_string($value))
-        continue;
+      if(!is_string($value)){
+        if(is_array($value) && is_string(@$value['@id'])){
+          $value = $value['@id'];
+        }else{
+          continue;
+        }
+      }
       if($key == '@id'){
         $this->context[$value] = lookup_context($value);
       }else{
@@ -110,6 +119,7 @@ class ContextHelper {
         $this->mapping[$key][] = $value;
       }
     }
+    //print_r($this->mapping);
   }
 
   // Note, this is technically all wrong, the referenced context may spcify how to construct the iri,
@@ -189,9 +199,10 @@ function toArrayHelper(POJO $o, $old=null) : array {
         if($v instanceof POJO){
           $v = $v->toArray($v, $o::NS['ID']);
         }else if($v instanceof simple_type){
-          $v = $v->toString();
+          $v = $v->__toString();
         }
       }
+      unset($v);
       if(count($value) == 1)
         $value = $value[0];
       $result[$entry->name] = $value;
@@ -228,9 +239,10 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
         if(isset($value[0])){
           foreach($value as &$v)
             if(is_array($v))
-              $v = fromArray($v, $context);
+              $v = fromArray($v, $context, $entry->defaultType);
+          unset($v);
         }else{
-          $value = [fromArray($value, $context)];
+          $value = [fromArray($value, $context, $entry->defaultType)];
         }
       }else{
         $value = [$value];
@@ -240,7 +252,7 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
   }
 }
 
-function fromArray(array $a, $context=null) : ?POJO {
+function fromArray(array $a, $context=null, $defaultType=null) : ?POJO {
   $context = ContextHelper::merge($context, @$a['@context']);
   $typefields = ['@type'];
   foreach($context->context as $c)
@@ -251,6 +263,8 @@ function fromArray(array $a, $context=null) : ?POJO {
     if(is_string($type))
       break;
   }
+  if(!is_string($type))
+    $type  = $defaultType;
   if(!is_string($type))
     return null;
   $class = $context->lookup($type);
@@ -295,8 +309,10 @@ function array_flatten(array $x, array $expand=[]) : array {
     foreach(array_flatten($vs) as $v)
       $res[] = $v;
   }
-  if(count($expand))
+  if(count($expand)){
     foreach($res as &$v)
       $v = deser($v,$expand);
+    unset($v);
+  }
   return $res;
 }

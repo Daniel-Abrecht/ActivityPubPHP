@@ -31,13 +31,16 @@ namespace auto\www_w3_org\ns\activitystreams {
           }
         }
       }
-      return $this->toString();
-    }
-    public function toString() : string|null {
       $v = @$this->get_href()[0];
       if($v)
-        return $v->toString();
+        return $v->__toString();
       return null;
+    }
+    public function __toString() : string {
+      $v = @$this->get_href()[0];
+      if($v)
+        return $v->__toString();
+      return '';
     }
   }
 }
