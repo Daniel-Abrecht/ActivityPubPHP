@@ -113,51 +113,35 @@ class ContextHelper {
       }
       if($key == '@id'){
         $this->context[$value] = lookup_context($value);
+        if($this->context[$value])
+          $this->mapping = array_merge($this->mapping, $this->context[$value]['MAPPING']);
       }else{
-        if(!isset($this->mapping[$key]))
-          $this->mapping[$key] = [];
-        $this->mapping[$key][] = $value;
+        $this->mapping[$key] = $value;
       }
     }
-    //print_r($this->mapping);
+    // TODO: only do this for new entries
+    foreach($this->mapping as &$value)
+      $value = $this->key2iri($value);
   }
 
-  // Note, this is technically all wrong, the referenced context may spcify how to construct the iri,
-  // and there is other special stuff like @vocab or @import, but we just assume a few things instead.
-  // In practice, this is good enough, and avoids a lot of overhead.
-  public function lookup($key){
+  public function key2iri($key){
+    if(isset($this->mapping[$key]))
+      return $this->mapping[$key];
     @list($prefix, $ref) = explode(':', $key, 2);
-    if($ref !== null){
-      if(isset($this->mapping[$prefix])){
-        $prefix = $this->mapping[$prefix];
-      }else if($ref[0] == '/'){
-        return lookup_type_by_iri($key);
-      }
-    }else{
-      $prefix = [];
-      foreach($this->context as $p)
-        $prefix[] = $p['PREFIX'];
-      $ref = $key;
-    }
-    if($prefix)
-    foreach($prefix as $p){
-      $v = lookup_type_by_iri($p, $ref);
-      if($v)
-        return $v;
-    }
+    if($ref !== null && isset($this->mapping[$prefix]))
+      return $this->mapping[$prefix] . $ref;
+    return $key;
+  }
+
+  public function lookup($key){
+    return lookup_type_by_iri($this->key2iri($key));
   }
 
   public static function merge(...$contexts){
     $result = new ContextHelper();
     foreach($contexts as $context){
       $c = new ContextHelper($context);
-      foreach($c->mapping as $k => $e){
-        if(!isset($result->mapping[$k])){
-          $result->mapping[$k] = $e;
-          continue;
-        }
-        $result->mapping[$k] = array_merge($result->mapping[$k], $e);
-      }
+      $result->mapping = array_merge($result->mapping, $c->mapping);
       $result->context = array_merge($result->context, $c->context);
     }
     return $result;

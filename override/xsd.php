@@ -24,7 +24,7 @@ declare(strict_types = 1);
   "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",null],
   "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",null],
   "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", null, "override/xsd.php"],
-  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\xsd\\I_anyURI", null, "override/xsd.php"]
+  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\www_w3_org\\_2001\\XMLSchema\\I_anyURI", null, "override/xsd.php"]
 }
 */
 

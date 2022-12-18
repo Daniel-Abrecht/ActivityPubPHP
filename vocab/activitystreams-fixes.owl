@@ -24,6 +24,16 @@
 as: a meta:nsinfo;
   meta:context "https://www.w3.org/ns/activitystreams" ;
   meta:typefield "type" ;
+  meta:ldmap meta:ldmap-as ;
+.
+
+meta:ldmap-as
+  "xsd"   "http://www.w3.org/2001/XMLSchema#";
+  "as"    "https://www.w3.org/ns/activitystreams#";
+  "ldp"   "http://www.w3.org/ns/ldp#";
+  "vcard" "http://www.w3.org/2006/vcard/ns#";
+  "id"    "@id";
+  "type"  "@type";
 .
 
 ###

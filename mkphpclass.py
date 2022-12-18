@@ -15,6 +15,8 @@ owl_ObjectProperty = URIRef("http://www.w3.org/2002/07/owl#ObjectProperty")
 owl_FunctionalProperty = URIRef("http://www.w3.org/2002/07/owl#FunctionalProperty")
 owl_Datatype = URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")
 owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty]
+owl_equivalentProperty = URIRef("http://www.w3.org/2002/07/owl#equivalentProperty")
+owl_sameAs = URIRef("http://www.w3.org/2002/07/owl#sameAs")
 
 wrapper = textwrap.TextWrapper(width=80-5)
 
@@ -51,11 +53,11 @@ class Registry:
         m = v
         l = len(k)
     return m
-  def getName(uri):
+  def getName(self,uri):
     m = self.getModuleForURI(uri)
     if not m:
       return None
-    return [m.uri, uri[len(m.uri):]]
+    return [str(m.uri), uri[len(m.uri):]]
   def serialize(self):
     for m in self.module.values():
       m.serialize()
@@ -68,6 +70,7 @@ class Module:
     self.g = registry.g
     self.classes = {}
     self.typefield = None
+    self.ldmap = {}
   def getNamespace(self):
     parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.uri)
     if not parts:
@@ -78,6 +81,8 @@ class Module:
     if not parts:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
+  def setMapping(self, prefix, value):
+    self.ldmap[str(prefix)] = str(value)
   def serialize(self):
     if len(self.classes) == 0:
       return;
@@ -86,6 +91,16 @@ class Module:
     contextPath = self.getContextNamespace().replace('\\','/')
     Path(contextPath).mkdir(parents=True, exist_ok=True)
     with open(contextPath+'/__module__.php', 'w') as f:
+      ldmap = {}
+      for prefix, value in self.ldmap.items():
+        ldmap[prefix] = value
+      for cls in self.classes.values():
+        ldmap[cls.name] = cls.uri
+        for prop in cls.property.values():
+          ldmap[prop.name] = prop.uri
+          for uri in prop.uris:
+            if prop.uri != uri:
+              ldmap[uri] = prop.uri
       s = """\
 <?php
 
@@ -99,6 +114,30 @@ class __module__ {
 """
       if self.typefield:
         s += '    "TYPEFIELD" => ' + json.dumps(self.typefield) + ",\n"
+      s += """\
+    "MAPPING" => [
+"""
+      for prefix, value in ldmap.items():
+        s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
+      s += """\
+    ],
+"""
+#    "INFO" => [
+# """
+#       for cls in self.classes.values():
+#         s += '      ' + json.dumps(cls.uri) + " => [\n"
+#         s += '        "type" => "class",\n'
+#         s += '        "name" => ' + json.dumps(cls.name) + ',\n'
+#         s += '        "class" => ' + json.dumps(cls.getAbsNS('C')) + ',\n'
+#         s += '      ],\n'
+#         for props in cls.property.values():
+#           s += '      ' + json.dumps(props.uri) + " => [\n"
+#           s += '        "type" => "property",\n'
+#           s += '        "name" => ' + json.dumps(props.name) + ',\n'
+#           s += '        "class" => ' + json.dumps(cls.getAbsNS('C')) + ',\n'
+#           s += '      ],\n'
+#      s += """\
+#    ],
       s += """\
   ];
 }
@@ -137,10 +176,11 @@ class Class:
     else:
       self.name = f'Anonymous{self.i}'
   def getOrCreateProperty(self, uri):
+    uri = URIRef(uri)
     if uri in self.property:
       return self.property[uri]
     p = Property(self, uri)
-    self.property[p.name] = p
+    self.property[uri] = p
     return p
   def getNamespace(self):
     return self.module.getNamespace()
@@ -212,7 +252,8 @@ class Class:
     s += '  const NS = \\'+self.module.getContextNamespace()+'\\__module__::META;\n'
     s += '  const TYPE = '+json.dumps(self.name)+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
-    for name, property in self.property.items():
+    for piri, property in self.property.items():
+      pprefix, pname = self.module.registry.getName(piri)
       if property.comment:
         s += '  /**\n' + ''.join([f"   * {s}\n" for s in wrapper.wrap(text='\n'.join(property.comment))]) + '   */\n'
       t  = ''
@@ -223,37 +264,39 @@ class Class:
       st = property.getType()
       st = ',' + json.dumps(st.uri) if st else ''
       s += '  #[\\auto\\Property('+json.dumps(property.uri)+','+json.dumps(property.name)+st+')]\n'
-      s += '  public function get_'+name+'()'
+      s += '  public function get_'+pname+'()'
       if t:
         s += ' : ' + t
       s += ';\n'
-      s += '  public function set_'+name+'('+tv+' $value) : void;\n'
+      s += '  public function set_'+pname+'('+tv+' $value) : void;\n'
       if property.isArray():
-        s += '  public function add_'+name+'('+tv+' $value) : void;\n'
-        s += '  public function del_'+name+'('+tv+' $value) : void;\n'
+        s += '  public function add_'+pname+'('+tv+' $value) : void;\n'
+        s += '  public function del_'+pname+'('+tv+' $value) : void;\n'
       s += '\n'
     s += '}\n\n'
     if nt[2]:
       s += 'abstract class A_' + self.name + ' implements D_' + self.name + ' {\n'
     else:
       s += 'class C_' + self.name + ' implements I_' + self.name + ' {\n'
-    for name, property in self.getAllProperties().items():
+    for piri, property in self.getAllProperties().items():
+      pprefix, pname = self.module.registry.getName(piri)
       t  = ''
       tv = ''
       if property.type:
         t  = property.genTypeConstraint()
         tv = property.genTypeConstraint(True)
-      s += '  private '+t+' $var_'+name
-      if   property.isArray():
-        s += ' = []'
-      elif property.nullable or not property.type:
-        s += ' = null'
-      s += ';\n'
-      s += '  public function get_'+name+'()'
+      if piri == property.uri:
+        s += '  private '+t+' $var_'+property.name
+        if   property.isArray():
+          s += ' = []'
+        elif property.nullable or not property.type:
+          s += ' = null'
+        s += ';\n'
+      s += '  public function get_'+pname+'()'
       if t:
         s += ' : ' + t + ' '
-      s += '{ return $this->var_'+name+'; }\n'
-      s += '  public function set_'+name+'('+tv+' $value) : void { $this->var_'+name+' = '
+      s += '{ return $this->var_'+property.name+'; }\n'
+      s += '  public function set_'+pname+'('+tv+' $value) : void { $this->var_'+property.name+' = '
       types = []
       if property.type:
         types = sorted([*property.type.getInstTypes()])
@@ -267,8 +310,8 @@ class Class:
           s += '$value'
       s += '; }\n'
       if property.isArray():
-        s += '  public function add_'+name+'('+tv+' $value) : void { $this->var_'+name+' = array_merge($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
-        s += '  public function del_'+name+'('+tv+' $value) : void { $this->var_'+name+' = array_diff ($this->var_'+name+', \\auto\\array_flatten($value,'+ser+')); }\n'
+        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+property.name+' = array_merge($this->var_'+property.name+', \\auto\\array_flatten($value,'+ser+')); }\n'
+        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+property.name+' = array_diff ($this->var_'+property.name+', \\auto\\array_flatten($value,'+ser+')); }\n'
       s += '\n'
     s += """\
   public function toArray($oldns=null) : """+('string|null|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$oldns); }
@@ -291,19 +334,19 @@ class Class:
 
 class Property:
   def __init__(self, cls, uri):
+    Property.i += 1
+    self.i = Property.i
     self.parent = cls
     self.g = cls.g
     self.uri = uri
+    self.uris = {self.uri}
     self.type = None
     self.comment = []
     self.nullable = True
     self.objectproperty = False
     self.datatypeproperty = False
     self.functionalproperty = False
-    if self.uri.startswith(self.parent.module.uri):
-      self.name = self.uri[len(self.parent.module.uri):]
-    else:
-      self.name = f'Anonymous{self.i}'
+    self.prefix, self.name = self.parent.module.registry.getName(self.uri)
   def setMeta(self, key, value):
     if key == URIRef('http://www.w3.org/2000/01/rdf-schema#range'):
       self.type = self.parent.module.registry.getOrCreateClass(value)
@@ -316,6 +359,16 @@ class Property:
         self.functionalproperty = True
       elif value == owl_ObjectProperty:
         self.objectproperty = True
+  def sameAs(self, value):
+    if value in self.parent.property:
+      prev = self.parent.property[value]
+      self.parent.property[self.uri] = prev
+      prev.uris.add(self.uri)
+    else:
+      self.parent.property[value] = self
+      self.uri = value
+      self.prefix, self.name = self.parent.module.registry.getName(self.uri)
+      self.uris.add(value)
   def genTypeConstraint(self, varadic=False):
     if not self.type:
       return None
@@ -336,10 +389,11 @@ class Property:
     if self.type and self.type.kind == 'class':
       return self.type
     return None
+Property.i = 1
 
 def getTypeOfProperty(r,g,s,p):
   for s, p, o in g.triples((s, p, None)):
-    m = r.getModuleForURI(s)
+    m = r.getModuleForURI(o)
     if o in m.classes:
       return m.classes[o]
 
@@ -348,13 +402,17 @@ def createModule(files):
   for f in files:
     g.parse(f, format='turtle')
   r = Registry(g)
-  for prefix, ns in g.namespaces():
+  nss = set(ns for prefix, ns in g.namespaces())
+  for ns in nss:
     context = None
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#context'), None)):
       context = o
     m = r.getOrCreateModule(ns, context)
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#typefield'), None)):
       m.typefield = o
+    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
+      for s, p, o in g.triples((o, None, None)):
+        m.setMapping(p,o)
   for s, p, o in chain(g.triples((None, RDF.type, owl_Class)),
                        g.triples((None, RDF.type, rdfs_Class))):
     ci = r.getOrCreateClass(s)
@@ -366,9 +424,14 @@ def createModule(files):
       if not t:
         continue
       for t in t.getTypes():
+        for s, p, o in chain(g.triples((s, owl_equivalentProperty, None)),
+                             g.triples((s, owl_sameAs, None))):
+          property = t.getOrCreateProperty(s)
+          property.sameAs(o)
+      for t in t.getTypes():
         property = t.getOrCreateProperty(s)
         property.setMeta('kind', pt)
-        for s, p, o in g.triples((s, None, None)):
+        for s, p, o in chain(g.triples((s, None, None))):
           property.setMeta(p, o)
   r.serialize()
 

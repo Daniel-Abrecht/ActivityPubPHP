@@ -24,20 +24,20 @@ namespace auto\www_w3_org\ns\activitystreams {
             continue;
           $value = $o->{'get_'.$name}();
           if($name == 'href'){
-            if(count($value) != 1)
+            if($value !== null)
               return parent::toArray($oldns);
           }else if($value === null || (is_array($value) && count($value) == 0)){
             return parent::toArray($oldns);
           }
         }
       }
-      $v = @$this->get_href()[0];
+      $v = $this->get_href();
       if($v)
         return $v->__toString();
       return null;
     }
     public function __toString() : string {
-      $v = @$this->get_href()[0];
+      $v = $this->get_href();
       if($v)
         return $v->__toString();
       return '';
