@@ -65,11 +65,10 @@ class Registry:
 class Module:
   def __init__(self, registry, uri, context):
     self.uri = uri
-    self.context = context or uri
+    self.context = context
     self.registry = registry
     self.g = registry.g
     self.classes = {}
-    self.typefield = None
     self.ldmap = {}
   def getNamespace(self):
     parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.uri)
@@ -77,7 +76,7 @@ class Module:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def getContextNamespace(self):
-    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.context)
+    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.context or self.uri)
     if not parts:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
@@ -109,11 +108,9 @@ namespace """+self.getContextNamespace()+""";
 
 class __module__ {
   const META = [
-    "ID" => """+json.dumps(self.context)+""",
+    "CONTEXT" => """+json.dumps(self.context)+""",
     "PREFIX" => """+json.dumps(self.uri)+""",
 """
-      if self.typefield:
-        s += '    "TYPEFIELD" => ' + json.dumps(self.typefield) + ",\n"
       s += """\
     "MAPPING" => [
 """
@@ -408,8 +405,6 @@ def createModule(files):
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#context'), None)):
       context = o
     m = r.getOrCreateModule(ns, context)
-    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#typefield'), None)):
-      m.typefield = o
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
       for s, p, o in g.triples((o, None, None)):
         m.setMapping(p,o)

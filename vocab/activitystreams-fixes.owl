@@ -23,7 +23,6 @@
 
 as: a meta:nsinfo;
   meta:context "https://www.w3.org/ns/activitystreams" ;
-  meta:typefield "type" ;
   meta:ldmap meta:ldmap-as ;
 .
 

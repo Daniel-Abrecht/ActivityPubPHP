@@ -124,13 +124,29 @@ class ContextHelper {
       $value = $this->key2iri($value);
   }
 
-  public function key2iri($key){
+  public function key2iri(string $key) : string {
     if(isset($this->mapping[$key]))
       return $this->mapping[$key];
     @list($prefix, $ref) = explode(':', $key, 2);
     if($ref !== null && isset($this->mapping[$prefix]))
       return $this->mapping[$prefix] . $ref;
     return $key;
+  }
+
+  public function iri2key(string $iri) : string{
+    $result = $iri;
+    $best = 0;
+    foreach($this->mapping as $key => $value){
+      if($iri == $value)
+        return $key;
+      if(count($value) >= $best)
+        continue;
+      if(!str_starts_with($iri, $value))
+        continue;
+      $best = count($value);
+      $result = $key+':'+substr($value,$best);
+    }
+    return $result;
   }
 
   public function lookup($key){
@@ -181,7 +197,7 @@ function toArrayHelper(POJO $o, $old=null) : array {
         $value = [$value];
       foreach($value as &$v){
         if($v instanceof POJO){
-          $v = $v->toArray($v, $o::NS['ID']);
+          $v = $v->toArray($v, $o::NS['CONTEXT']);
         }else if($v instanceof simple_type){
           $v = $v->__toString();
         }
@@ -191,9 +207,12 @@ function toArrayHelper(POJO $o, $old=null) : array {
         $value = $value[0];
       $result[$entry->name] = $value;
     }
-    if($o::NS['ID'] != $old)
-      $result['@context'] = $o::NS['ID'];
-    $result[@$o::NS['TYPEFIELD'] ?? '@type'] = $o::TYPE;
+    if($o::NS['CONTEXT'] && $o::NS['CONTEXT'] != $old)
+      $result['@context'] = $o::NS['CONTEXT'];
+    $typefield = array_search('@type', $o::NS['MAPPING'], false);
+    if(!$typefield)
+      $typefield = '@type';
+    $result[$typefield] = $o::TYPE;
   }
   return $result;
 }
@@ -238,10 +257,7 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
 
 function fromArray(array $a, $context=null, $defaultType=null) : ?POJO {
   $context = ContextHelper::merge($context, @$a['@context']);
-  $typefields = ['@type'];
-  foreach($context->context as $c)
-    if(@$c['TYPEFIELD'])
-      $typefields[] = $c['TYPEFIELD'];
+  $typefields = array_merge(['@type'], array_keys($context->mapping, '@type', true));
   foreach($typefields as $typefield){
     $type = @$a[$typefield];
     if(is_string($type))
