@@ -32,7 +32,7 @@ spl_autoload_register(function($class_name){
 });
 
 interface POJO extends \Serializable {
-  public function toArray($oldns=null) : array|string|null;
+  public function toArray(ContextHelper $context=null) : array|string|null;
   public function fromArray(array $data) : void;
 }
 
@@ -42,6 +42,7 @@ interface simple_type extends \Serializable, \Stringable {
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
 class Property {
+  public ?string $property = null;
   function __construct(
     public string $iri,
     public string $name,
@@ -139,7 +140,7 @@ class ContextHelper {
     foreach($this->mapping as $key => $value){
       if($iri == $value)
         return $key;
-      if(count($value) >= $best)
+      if(strlen($value) >= $best)
         continue;
       if(!str_starts_with($iri, $value))
         continue;
@@ -176,7 +177,11 @@ function getAllParents($reflection, &$list=[]){
   return $list;
 }
 
-function toArrayHelper(POJO $o, $old=null) : array {
+function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
+  $sco = false;
+  if($o::NS['CONTEXT'] && (!$context || $o::NS['CONTEXT'] != array_key_last($context->context)))
+    $sco = true;
+  $context = ContextHelper::merge($context, $o::NS['CONTEXT']);
   $result = [];
   foreach(getAllParents(get_class($o)) as $reflection){
     $info = [];
@@ -197,7 +202,7 @@ function toArrayHelper(POJO $o, $old=null) : array {
         $value = [$value];
       foreach($value as &$v){
         if($v instanceof POJO){
-          $v = $v->toArray($v, $o::NS['CONTEXT']);
+          $v = $v->toArray($context);
         }else if($v instanceof simple_type){
           $v = $v->__toString();
         }
@@ -205,53 +210,60 @@ function toArrayHelper(POJO $o, $old=null) : array {
       unset($v);
       if(count($value) == 1)
         $value = $value[0];
-      $result[$entry->name] = $value;
+      $key = $context->iri2key($entry->iri);
+      $result[$key] = $value;
     }
-    if($o::NS['CONTEXT'] && $o::NS['CONTEXT'] != $old)
+    if($sco)
       $result['@context'] = $o::NS['CONTEXT'];
-    $typefield = array_search('@type', $o::NS['MAPPING'], false);
-    if(!$typefield)
-      $typefield = '@type';
-    $result[$typefield] = $o::TYPE;
+    $result[$context->iri2key('@type')] = $context->iri2key($o::IRI);
   }
   return $result;
 }
 
-function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
-  if(!$context)
-    $context = ContextHelper::merge(@$a['@context'], $o::IRI);
-  $result = [];
+$g_iri_map = [];
+function getIRItoNameMap(POJO $o){
+  if(isset($g_iri_map[get_class($o)]))
+    return $g_iri_map[get_class($o)];
+  $info = [];
   foreach(getAllParents(get_class($o)) as $reflection){
-    $info = [];
     foreach($reflection->getMethods() as $entry){
       if(!($attr = @$entry->getAttributes(Property::class)[0]))
         continue;
       if(!($name = @explode('_', $entry->getName(), 2)[1]))
         continue;
-      if(isset($info[$name]))
-        continue;
-      $info[$name] = $attr->newInstance();
+      $prop = $attr->newInstance();
+      $prop->property = $name;
+      $info[$prop->iri] = $prop;
     }
-    foreach($info as $key => $entry){
-      if(isset($a[$entry->name])){
-        $value = $a[$entry->name];
-      }else if(isset($a[$entry->iri])){
-        $value = $a[$entry->iri];
-      }else continue;
-      if(is_array($value)){
-        if(isset($value[0])){
-          foreach($value as &$v)
-            if(is_array($v))
-              $v = fromArray($v, $context, $entry->defaultType);
-          unset($v);
-        }else{
-          $value = [fromArray($value, $context, $entry->defaultType)];
-        }
+  }
+  $g_iri_map[get_class($o)] = $info;
+  return $info;
+}
+
+function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
+  if(!$context)
+    $context = ContextHelper::merge(@$a['@context'], $o::IRI);
+  $iri_map = getIRItoNameMap($o);
+  foreach($a as $key => $value){
+    $key = $context->key2iri($key);
+    $entry = @$iri_map[$key];
+    if(!$entry){
+      print_r([$key]);
+      continue;
+    }
+    if(is_array($value)){
+      if(isset($value[0])){
+        foreach($value as &$v)
+          if(is_array($v))
+            $v = fromArray($v, $context, $entry->defaultType);
+        unset($v);
       }else{
-        $value = [$value];
+        $value = [fromArray($value, $context, $entry->defaultType)];
       }
-      $o->{'set_'.$key}(...$value);
+    }else{
+      $value = [$value];
     }
+    $o->{'set_'.$entry->name}(...$value);
   }
 }
 

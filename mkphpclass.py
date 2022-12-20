@@ -94,8 +94,14 @@ class Module:
       for prefix, value in self.ldmap.items():
         ldmap[prefix] = value
       for cls in self.classes.values():
+        mc = self.registry.getModuleForURI(cls.uri)
+        if not mc:
+          continue
         ldmap[cls.name] = cls.uri
         for prop in cls.property.values():
+          mp = self.registry.getModuleForURI(prop.uri)
+          if not mp or mp != mc:
+            continue
           ldmap[prop.name] = prop.uri
           for uri in prop.uris:
             if prop.uri != uri:
@@ -311,7 +317,7 @@ class Class:
         s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+property.name+' = array_diff ($this->var_'+property.name+', \\auto\\array_flatten($value,'+ser+')); }\n'
       s += '\n'
     s += """\
-  public function toArray($oldns=null) : """+('string|null|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$oldns); }
+  public function toArray(\\auto\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$context); }
   public function fromArray(array|string $data) : void { \\auto\\fromArrayHelper($this, $data); }
   public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
   public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }

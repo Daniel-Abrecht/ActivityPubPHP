@@ -1,6 +1,7 @@
 @prefix : <http://www.w3.org/ns/activitystreams#> .
 @prefix as: <http://www.w3.org/ns/activitystreams#> .
-@prefix fix: <http://dpa.li/ns/owl/fixes/activitystreams#> .
+#@prefix fix: <http://dpa.li/ns/owl/fixes/activitystreams#> .
+@prefix fix: <http://www.w3.org/ns/activitystreams#> .
 @prefix ext: <http://dpa.li/ns/owl/extension/activitystreams#> .
 @prefix sec: <https://w3id.org/security#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -65,7 +66,7 @@ toot:suspended a owl:DatatypeProperty;
 
 # There is a publicKey property in sec: but it's rdfs:domain is Key,
 # and it has no rdfs:range, so it's a property of Key, and not of type Key, and misused in mastodon.
-fix:publicKey a owl:DatatypeProperty;
+sec:publicKey a owl:DatatypeProperty;
   rdfs:label "publicKey"@en ;
   rdfs:comment "The public key for verifying signed messages"@en ;
   rdfs:range sec:Key ;
