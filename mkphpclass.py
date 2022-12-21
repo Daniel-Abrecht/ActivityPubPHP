@@ -98,16 +98,28 @@ class Module:
     contextPath = self.getContextNamespace().replace('\\','/')
     Path(contextPath).mkdir(parents=True, exist_ok=True)
     with open(contextPath+'/__module__.php', 'w') as f:
-      ldmap = {}
+      ldmap_n = {}
+      ldmap_c = {}
+      ldmap_p = {}
+      ldmap_a = {}
       for prefix, value in self.ldmap.items():
-        ldmap[prefix] = value
+        ldmap_n[prefix] = value
       for cls in self.classes.values():
-        ldmap[cls.name] = cls.uri
+        ldmap_c[cls.name] = cls.uri
       for prop in self.property.values():
-        ldmap[prop.name] = prop.uri
+        if prop.name != str(prop.uri):
+          ldmap_p[prop.name] = prop.uri
         for uri in prop.uris:
           if prop.uri != uri:
-            ldmap[uri] = prop.uri
+            uprefix, uname = self.registry.getName(uri)
+            ldmap_p[uname] = prop.uri
+            ldmap_a[uri] = prop.uri
+      ldmap = dict(
+          sorted(ldmap_n.items())
+        + sorted(ldmap_c.items())
+        + sorted(ldmap_p.items())
+        + sorted(ldmap_a.items())
+      )
       s = """\
 <?php
 
@@ -134,7 +146,7 @@ class __module__ {
       s = v.serialize()
       if not s:
         continue
-      with open(path+'/'+v.name+'.php', 'w') as f:
+      with open(path+'/'+escape_id(v.name)+'.php', 'w') as f:
         print(s, file=f)
 
 def getRdfObjectList(g, first):
@@ -162,6 +174,8 @@ class Class:
       self.name = self.uri[len(self.module.uri):]
     else:
       self.name = f'Anonymous{self.i}'
+    if self.name == '@id':
+      raise Exception("Huh")
   def addProperty(self, iri, cls):
     self.property[iri] = cls
   def getNamespace(self):
@@ -188,7 +202,7 @@ class Class:
   def getAbsNS(self, t='I'):
     if t == 'I' and str(self.uri) in native_types and native_types[str(self.uri)][0]:
       return native_types[str(self.uri)][0]
-    return '\\'+self.getNamespace()+'\\'+t+'_'+self.name
+    return '\\'+self.getNamespace()+'\\'+t+'_'+escape_id(self.name)
   def getConstituents(self):
     res = set()
     if   self.kind == 'class':
@@ -226,7 +240,7 @@ class Class:
       s += 'interface D_'
     else:
       s += 'interface I_'
-    s += self.name+' extends \\auto\\POJO'
+    s += escape_id(self.name)+' extends \\auto\\POJO'
     if len(self.implements):
       s += ', '
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
@@ -258,9 +272,9 @@ class Class:
       s += '\n'
     s += '}\n\n'
     if nt[2]:
-      s += 'abstract class A_' + self.name + ' implements D_' + self.name + ' {\n'
+      s += 'abstract class A_' + escape_id(self.name) + ' implements D_' + escape_id(self.name) + ' {\n'
     else:
-      s += 'class C_' + self.name + ' implements I_' + self.name + ' {\n'
+      s += 'class C_' + escape_id(self.name) + ' implements I_' + escape_id(self.name) + ' {\n'
     for piri, property in self.getAllProperties().items():
       pprefix, pname = self.module.registry.getName(piri)
       pname = escape_id(pname)
@@ -340,7 +354,8 @@ class Property:
       self.comment.append(value)
     elif key == rdf_domain:
       if str(value) == '*':
-        for s, p, o in self.g.triples((None, RDF.type, None)):
+        for s, p, o in chain(self.g.triples((None, RDF.type, owl_Class)),
+                             self.g.triples((None, RDF.type, rdfs_Class))):
           self.setMeta(key, s, alias)
       else:
         cls = self.module.registry.getOrCreateClass(value)
