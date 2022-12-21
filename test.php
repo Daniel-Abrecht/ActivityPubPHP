@@ -65,6 +65,14 @@ print_r(\auto\unserialize('
         "url": "https://example.com/files/kappa.png"
       }
     }
+  ],
+  "attachment": [
+    {
+      "type": "Image",
+      "mediaType": "image/png",
+      "url": "https://example.com/files/cats.png",
+      "toot:focalPoint": [-0.55,0.43]
+    }
   ]
 }
 ')->serialize()."\n");

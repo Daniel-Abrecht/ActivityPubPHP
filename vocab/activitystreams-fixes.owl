@@ -32,9 +32,10 @@ meta:ldmap-as
   "as"    "https://www.w3.org/ns/activitystreams#";
   "ldp"   "http://www.w3.org/ns/ldp#";
   "vcard" "http://www.w3.org/2006/vcard/ns#";
-  "id"    "@id";
   "type"  "@type";
 .
+
+as:id owl:equivalentProperty "@id" .
 
 ###
 # Patching actor types to be of actor type

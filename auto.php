@@ -1,6 +1,6 @@
 <?php
 
-// Note: a lot of things are wrong here.
+// Note: a few things are wrong here.
 // Do not worry about that, all the ActivityPub related specs are a giant clusterfuck anyway,
 // you can only make things work, you can't make them work correctly.
 
@@ -42,10 +42,9 @@ interface simple_type extends \Serializable, \Stringable {
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
 class Property {
-  public ?string $property = null;
+  public ?string $name = null;
   function __construct(
     public string $iri,
-    public string $name,
     public string|null $defaultType = null
   ){}
 }
@@ -140,12 +139,12 @@ class ContextHelper {
     foreach($this->mapping as $key => $value){
       if($iri == $value)
         return $key;
-      if(strlen($value) >= $best)
+      if(strlen($value) <= $best)
         continue;
       if(!str_starts_with($iri, $value))
         continue;
-      $best = count($value);
-      $result = $key+':'+substr($value,$best);
+      $best = strlen($value);
+      $result = $key.':'.substr($iri,$best);
     }
     return $result;
   }
@@ -182,61 +181,53 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
   if($o::NS['CONTEXT'] && (!$context || $o::NS['CONTEXT'] != array_key_last($context->context)))
     $sco = true;
   $context = ContextHelper::merge($context, $o::NS['CONTEXT']);
+  $map = getIRItoNameMap($o);
   $result = [];
-  foreach(getAllParents(get_class($o)) as $reflection){
-    $info = [];
-    foreach($reflection->getMethods() as $entry){
-      if(!($attr = @$entry->getAttributes(Property::class)[0]))
-        continue;
-      if(!($name = @explode('_', $entry->getName(), 2)[1]))
-        continue;
-      if(isset($info[$name]))
-        continue;
-      $info[$name] = $attr->newInstance();
-    }
-    foreach($info as $key => $entry){
-      $value = $o->{'get_'.$key}();
-      if($value === null || (is_array($value) && count($value) == 0))
-        continue;
-      if(!is_array($value) || !isset($value[0]))
-        $value = [$value];
-      foreach($value as &$v){
-        if($v instanceof POJO){
-          $v = $v->toArray($context);
-        }else if($v instanceof simple_type){
-          $v = $v->__toString();
-        }
+  if($sco)
+    $result['@context'] = $o::NS['CONTEXT'];
+  $result[$context->iri2key('@type')] = $context->iri2key($o::IRI);
+  foreach($map as $entry){
+    $value = $o->{'get_'.$entry->name}();
+    if($value === null || (is_array($value) && count($value) == 0))
+      continue;
+    if(!is_array($value) || !isset($value[0]))
+      $value = [$value];
+    foreach($value as &$v){
+      if($v instanceof POJO){
+        $v = $v->toArray($context);
+      }else if($v instanceof simple_type){
+        $v = $v->__toString();
       }
-      unset($v);
-      if(count($value) == 1)
-        $value = $value[0];
-      $key = $context->iri2key($entry->iri);
-      $result[$key] = $value;
     }
-    if($sco)
-      $result['@context'] = $o::NS['CONTEXT'];
-    $result[$context->iri2key('@type')] = $context->iri2key($o::IRI);
+    unset($v);
+    if(count($value) == 1)
+      $value = $value[0];
+    $key = $context->iri2key($entry->iri);
+    if(!isset($result[$key]))
+      $result[$key] = $value;
   }
   return $result;
 }
 
 $g_iri_map = [];
-function getIRItoNameMap(POJO $o){
-  if(isset($g_iri_map[get_class($o)]))
-    return $g_iri_map[get_class($o)];
+function getIRItoNameMap(POJO|string $o){
+  $o = get_class($o);
+  if(isset($g_iri_map[$o]))
+    return $g_iri_map[$o];
   $info = [];
-  foreach(getAllParents(get_class($o)) as $reflection){
+  foreach(getAllParents($o) as $reflection){
     foreach($reflection->getMethods() as $entry){
       if(!($attr = @$entry->getAttributes(Property::class)[0]))
         continue;
       if(!($name = @explode('_', $entry->getName(), 2)[1]))
         continue;
       $prop = $attr->newInstance();
-      $prop->property = $name;
+      $prop->name = $name;
       $info[$prop->iri] = $prop;
     }
   }
-  $g_iri_map[get_class($o)] = $info;
+  ksort($info);
+  $g_iri_map[$o] = $info;
   return $info;
 }
 
@@ -248,7 +239,8 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
     $key = $context->key2iri($key);
     $entry = @$iri_map[$key];
     if(!$entry){
-      print_r([$key]);
+      if($key[0] != '@')
+        trigger_error("No mapping for IRI: $key\n");
       continue;
     }
     if(is_array($value)){

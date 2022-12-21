@@ -19,9 +19,10 @@ meta:ldmap-sec
   "dc"   "http://purl.org/dc/terms/";
   "sec"  "https://w3id.org/security#";
   "xsd"  "http://www.w3.org/2001/XMLSchema#";
-  "id"   "@id";
   "type" "@type";
 .
+
+sec:id owl:equivalentProperty "@id" .
 
 sec:owner
   rdfs:domain sec:Key ;
