@@ -84,9 +84,11 @@ class Module:
       return 'auto\\anonymous'
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def getContextNamespace(self):
-    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.context or self.uri)
+    if not self.context:
+      return None
+    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.context)
     if not parts:
-      return 'auto\\anonymous'
+      return None
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def setMapping(self, prefix, value):
     self.ldmap[str(prefix)] = str(value)
@@ -95,32 +97,34 @@ class Module:
       return;
     path = self.getNamespace().replace('\\','/')
     Path(path).mkdir(parents=True, exist_ok=True)
-    contextPath = self.getContextNamespace().replace('\\','/')
-    Path(contextPath).mkdir(parents=True, exist_ok=True)
-    with open(contextPath+'/__module__.mod', 'w') as f:
-      ldmap_n = {}
-      ldmap_c = {}
-      ldmap_p = {}
-      ldmap_a = {}
-      for prefix, value in self.ldmap.items():
-        ldmap_n[prefix] = value
-      for cls in self.classes.values():
-        ldmap_c[cls.name] = cls.uri
-      for prop in self.property.values():
-        if prop.name != str(prop.uri):
-          ldmap_p[prop.name] = prop.uri
-        for uri in prop.uris:
-          if prop.uri != uri:
-            uprefix, uname = self.registry.getName(uri)
-            ldmap_p[uname] = prop.uri
-            ldmap_a[uri] = prop.uri
-      ldmap = dict(
-          sorted(ldmap_n.items())
-        + sorted(ldmap_c.items())
-        + sorted(ldmap_p.items())
-        + sorted(ldmap_a.items())
-      )
-      s = """\
+    contextPath = self.getContextNamespace()
+    if contextPath:
+      contextPath = contextPath.replace('\\','/')
+      Path(contextPath).mkdir(parents=True, exist_ok=True)
+      with open(contextPath+'/__module__.mod', 'w') as f:
+        ldmap_n = {}
+        ldmap_c = {}
+        ldmap_p = {}
+        ldmap_a = {}
+        for prefix, value in self.ldmap.items():
+          ldmap_n[prefix] = value
+        for cls in self.classes.values():
+          ldmap_c[cls.name] = cls.uri
+        for prop in self.property.values():
+          if prop.name != str(prop.uri):
+            ldmap_p[prop.name] = prop.uri
+          for uri in prop.uris:
+            if prop.uri != uri:
+              uprefix, uname = self.registry.getName(uri)
+              ldmap_p[uname] = prop.uri
+              ldmap_a[uri] = prop.uri
+        ldmap = dict(
+            sorted(ldmap_n.items())
+          + sorted(ldmap_c.items())
+          + sorted(ldmap_p.items())
+          + sorted(ldmap_a.items())
+        )
+        s = """\
 <?php
 
 declare(strict_types = 1);
@@ -131,17 +135,17 @@ class __module__ {
     "CONTEXT" => """+json.dumps(self.context)+""",
     "PREFIX" => """+json.dumps(self.uri)+""",
 """
-      s += """\
+        s += """\
     "MAPPING" => [
 """
-      for prefix, value in ldmap.items():
-        s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
-      s += """\
+        for prefix, value in ldmap.items():
+          s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
+        s += """\
     ]
   ];
 }
 """
-      print(s, file=f)
+        print(s, file=f)
     for v in self.classes.values():
       s = v.serialize()
       if not s:
@@ -253,7 +257,7 @@ class Class:
       s += ', '
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
     s += ' {\n'
-    s += '  const NS = \\'+self.module.getContextNamespace()+'\\__module__::META;\n'
+    s += '  const NS = '+json.dumps(self.module.context)+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
     for piri, property in self.property.items():
       pprefix, pname = self.module.registry.getName(piri)

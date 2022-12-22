@@ -1,7 +1,7 @@
 <?php
 
 declare(strict_types = 1);
-require 'auto.php';
+require 'auto.mod';
 
 $person = new \auto\www_w3_org\ns\activitystreams\C_Person();
 $person->set_preferredUsername("Hello World!");
@@ -10,7 +10,6 @@ $image_1->set_href("https://dpa.li/avatar.png");
 $image_2 = new \auto\www_w3_org\ns\activitystreams\C_Link();
 $image_2->set_href("https://dpa.li/avatar.png");
 $person->add_image($image_1,$image_2,"https://dpa.li/avatar.png");
-//$person->add_image();
 echo $person->serialize() . "\n";
 
 print_r(\auto\unserialize('

@@ -1,9 +1,5 @@
 <?php
 
-// Note: a few things are wrong here.
-// Do not worry about that, all the ActivityPub related specs are a giant clusterfuck anyway,
-// you can only make things work, you can't make them work correctly.
-
 declare(strict_types = 1);
 namespace auto;
 
@@ -206,7 +202,7 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
     $context = new ContextHelper();
   $map = getIRItoNameMap($o);
   $result = [];
-  $contexts = [$o::NS['CONTEXT'] => INF];
+  $contexts = [@$o::NS => INF];
   foreach($map as $entry){
     $value = $o->{'get_'.$entry->name}();
     if($value === null || (is_array($value) && count($value) == 0))
