@@ -27,7 +27,7 @@ spl_autoload_register(function($class_name){
       return;
   }
   $namespace = implode('/', $parts);
-  $file = $namespace . '/' . $name . '.php';
+  $file = $namespace . '/' . $name . '.mod';
   load($file);
 });
 
@@ -154,14 +154,13 @@ class ContextHelper {
     return lookup_type_by_iri($this->key2iri($key));
   }
 
-  public static function merge(...$contexts){
-    $result = new ContextHelper();
+  public function merge(...$contexts){
     foreach($contexts as $context){
       $c = new ContextHelper($context);
-      $result->mapping = array_merge($result->mapping, $c->mapping);
-      $result->context = array_merge($result->context, $c->context);
+      $this->mapping = array_merge($this->mapping, $c->mapping);
+      $this->context = array_merge($this->context, $c->context);
     }
-    return $result;
+    return $this;
   }
 }
 
@@ -177,28 +176,37 @@ function getAllParents($reflection, &$list=[]){
   return $list;
 }
 
-function g_compact(array $in, ContextHelper $context){
+function g_compact_sub(array $in, ContextHelper $context){
   $out = [];
   foreach($in as $key => $value){
+    if($key === '@type')
+      $value = $context->iri2key($value);
     if(is_string($key))
       $key = $context->iri2key($key);
     if(is_array($value))
-      $value = g_compact($value, $context);
+      $value = g_compact_sub($value, $context);
     $out[$key] = $value;
   }
   return $out;
 }
 
+function g_compact(array $in, ContextHelper $context){
+  $out = ['@context' => array_keys($context->context)];
+  if(count($out['@context']) == 0)
+    unset($out['@context']);
+  if(count($out['@context']) == 1)
+    $out['@context'] = $out['@context'][0];
+  $out = $out + g_compact_sub($in, $context);
+  return $out;
+}
+
 function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
-  $sco = false;
-  if($o::NS['CONTEXT'] && (!$context || $o::NS['CONTEXT'] != array_key_last($context->context)))
-    $sco = true;
-  $context = ContextHelper::merge($context, $o::NS['CONTEXT']);
+  $toplevel = !$context;
+  if(!$context)
+    $context = new ContextHelper();
   $map = getIRItoNameMap($o);
   $result = [];
-  if($sco)
-    $result['@context'] = $o::NS['CONTEXT'];
-  $result['@type'] = $context->iri2key($o::IRI);
+  $contexts = [$o::NS['CONTEXT'] => INF];
   foreach($map as $entry){
     $value = $o->{'get_'.$entry->name}();
     if($value === null || (is_array($value) && count($value) == 0))
@@ -215,10 +223,17 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
     unset($v);
     if(count($value) == 1)
       $value = $value[0];
-    if(!isset($result[$entry->iri]))
+    if(!isset($result[$entry->iri])){
       $result[$entry->iri] = $value;
+      $contexts[$entry->context] = @$contexts[$entry->context] + 1;
+    }
   }
-  return g_compact($result, $context);
+  asort($contexts);
+  $context->merge(...array_keys($contexts));
+  $result = ['@type'=>$o::IRI] + $result;
+  if($toplevel)
+    return g_compact($result, $context);
+  return $result;
 }
 
 $g_iri_map = [];
@@ -245,7 +260,7 @@ function getIRItoNameMap(POJO|string $o){
 
 function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
   if(!$context)
-    $context = ContextHelper::merge(@$a['@context'], $o::IRI);
+    $context = (new ContextHelper())->merge(@$a['@context'], $o::IRI);
   $iri_map = getIRItoNameMap($o);
   foreach($a as $key => $value){
     $key = $context->key2iri($key);
@@ -272,7 +287,7 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
 }
 
 function fromArray(array $a, $context=null, $defaultType=null) : ?POJO {
-  $context = ContextHelper::merge($context, @$a['@context']);
+  $context = (new ContextHelper())->merge($context, @$a['@context']);
   $typefields = array_merge(['@type'], array_keys($context->mapping, '@type', true));
   foreach($typefields as $typefield){
     $type = @$a[$typefield];

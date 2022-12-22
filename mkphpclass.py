@@ -97,7 +97,7 @@ class Module:
     Path(path).mkdir(parents=True, exist_ok=True)
     contextPath = self.getContextNamespace().replace('\\','/')
     Path(contextPath).mkdir(parents=True, exist_ok=True)
-    with open(contextPath+'/__module__.php', 'w') as f:
+    with open(contextPath+'/__module__.mod', 'w') as f:
       ldmap_n = {}
       ldmap_c = {}
       ldmap_p = {}
@@ -146,7 +146,7 @@ class __module__ {
       s = v.serialize()
       if not s:
         continue
-      with open(path+'/'+escape_id(v.name)+'.php', 'w') as f:
+      with open(path+'/'+escape_id(v.name)+'.mod', 'w') as f:
         print(s, file=f)
 
 def getRdfObjectList(g, first):
