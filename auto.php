@@ -45,7 +45,8 @@ class Property {
   public ?string $name = null;
   function __construct(
     public string $iri,
-    public string|null $defaultType = null
+    public string|null $defaultType = null,
+    public string|null $context = null
   ){}
 }
 
@@ -176,6 +177,18 @@ function getAllParents($reflection, &$list=[]){
   return $list;
 }
 
+function g_compact(array $in, ContextHelper $context){
+  $out = [];
+  foreach($in as $key => $value){
+    if(is_string($key))
+      $key = $context->iri2key($key);
+    if(is_array($value))
+      $value = g_compact($value, $context);
+    $out[$key] = $value;
+  }
+  return $out;
+}
+
 function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
   $sco = false;
   if($o::NS['CONTEXT'] && (!$context || $o::NS['CONTEXT'] != array_key_last($context->context)))
@@ -185,7 +198,7 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
   $result = [];
   if($sco)
     $result['@context'] = $o::NS['CONTEXT'];
-  $result[$context->iri2key('@type')] = $context->iri2key($o::IRI);
+  $result['@type'] = $context->iri2key($o::IRI);
   foreach($map as $entry){
     $value = $o->{'get_'.$entry->name}();
     if($value === null || (is_array($value) && count($value) == 0))
@@ -202,11 +215,10 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
     unset($v);
     if(count($value) == 1)
       $value = $value[0];
-    $key = $context->iri2key($entry->iri);
-    if(!isset($result[$key]))
-      $result[$key] = $value;
+    if(!isset($result[$entry->iri]))
+      $result[$entry->iri] = $value;
   }
-  return $result;
+  return g_compact($result, $context);
 }
 
 $g_iri_map = [];

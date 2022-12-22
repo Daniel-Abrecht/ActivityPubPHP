@@ -162,6 +162,8 @@ def getRdfObjectList(g, first):
 
 class Class:
   def __init__(self, module, uri):
+    Class.i += 1
+    self.i = Class.i
     self.kind = 'class'
     self.module = module
     self.g = module.g
@@ -170,14 +172,17 @@ class Class:
     self.implements = []
     self.property = {}
     self.label = None
+    self.extra_context = set()
     if self.uri.startswith(self.module.uri):
       self.name = self.uri[len(self.module.uri):]
     else:
       self.name = f'Anonymous{self.i}'
     if self.name == '@id':
       raise Exception("Huh")
-  def addProperty(self, iri, cls):
-    self.property[iri] = cls
+  def addProperty(self, iri, property):
+    if property.module.context:
+      self.extra_context.add(str(property.module.context))
+    self.property[iri] = property
   def getNamespace(self):
     return self.module.getNamespace()
   def setMeta(self, key, value):
@@ -226,6 +231,7 @@ class Class:
     parts = set(t.getAbsNS() for t in self.getConstituents())
     return parts
   def serialize(self):
+    extra_context = sorted(self.extra_context)
     if self.kind != 'class':
       return
     nt = native_types.get(str(self.uri)) or [None, None, None]
@@ -234,6 +240,8 @@ class Class:
     s = '<?php\n\n'
     s += 'declare(strict_types = 1);\n'
     s += 'namespace '+self.getNamespace()+';\n\n'
+    if extra_context:
+      s += f'const EC{self.i} = {json.dumps(extra_context)};\n\n'
     if self.comment:
       s += '/**\n' + ''.join([f" * {s}\n" for s in wrapper.wrap(text='\n'.join(self.comment))]) + ' */\n'
     if nt[2]:
@@ -246,7 +254,6 @@ class Class:
       s += ', '.join([cls.getAbsNS() for cls in self.implements])
     s += ' {\n'
     s += '  const NS = \\'+self.module.getContextNamespace()+'\\__module__::META;\n'
-    s += '  const TYPE = '+json.dumps(self.name)+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
     for piri, property in self.property.items():
       pprefix, pname = self.module.registry.getName(piri)
@@ -259,8 +266,10 @@ class Class:
         t  = property.genTypeConstraint()
         tv = property.genTypeConstraint(True)
       st = property.getType()
-      st = ',' + json.dumps(st.uri) if st else ''
-      s += '  #[\\auto\\Property('+json.dumps(property.uri)+st+')]\n'
+      pp = json.dumps(property.uri)
+      pp += ',' + json.dumps(st.uri if st else None)
+      pp += f',EC{self.i}[{extra_context.index(str(property.module.context))}]' if property.module.context else ',null'
+      s += '  #[\\auto\\Property('+pp+')]\n'
       s += '  public function get_'+pname+'()'
       if t:
         s += ' : ' + t
@@ -330,6 +339,7 @@ class Class:
     return properties
   def getTypes(self):
     return [self]
+Class.i = 0
 
 class Property:
   def __init__(self, module, uri):
