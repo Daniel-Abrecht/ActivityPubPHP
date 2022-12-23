@@ -78,6 +78,7 @@ class Module:
     self.classes = {}
     self.property = {}
     self.ldmap = {}
+    self.ldext = {}
   def getNamespace(self):
     parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.uri)
     if not parts:
@@ -92,6 +93,8 @@ class Module:
     return 'auto\\'+escape_id(parts[3].replace('/','\\'))
   def setMapping(self, prefix, value):
     self.ldmap[str(prefix)] = str(value)
+  def setMappingExt(self, prefix, value):
+    self.ldext[str(prefix)] = str(value)
   def serialize(self):
     if len(self.classes) == 0:
       return;
@@ -139,6 +142,12 @@ class __module__ {
     "MAPPING" => [
 """
         for prefix, value in ldmap.items():
+          s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
+        s += """\
+    ],
+    "MAPPING_EXT" => [
+"""
+        for prefix, value in self.ldext.items():
           s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
         s += """\
     ]
@@ -429,6 +438,9 @@ def createModule(files):
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
       for s, p, o in g.triples((o, None, None)):
         m.setMapping(p,o)
+    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldext'), None)):
+      for s, p, o in g.triples((o, None, None)):
+        m.setMappingExt(p,o)
   for s, p, o in chain(g.triples((None, RDF.type, owl_Class)),
                        g.triples((None, RDF.type, rdfs_Class))):
     ci = r.getOrCreateClass(s)

@@ -82,12 +82,14 @@ function lookup_context($uri){
 }
 
 class ContextHelper {
-  public $mapping = [];
   public $context = [];
+  public $mapping = [];
+  public $mapping_ext = [];
   public function __construct($context=null){
     if($context instanceof self){
-      $this->mapping = $context->mapping;
       $this->context = $context->context;
+      $this->mapping = $context->mapping;
+      $this->mapping_ext = $context->mapping_ext;
       return;
     }
     if(!$context)
@@ -109,31 +111,41 @@ class ContextHelper {
         }
       }
       if($key == '@id'){
-        $this->context[$value] = lookup_context($value);
-        if($this->context[$value])
-          $this->mapping = array_merge($this->mapping, $this->context[$value]['MAPPING']);
+        $lctx = lookup_context($value);
+        $this->context[$value] = $lctx;
+        if($lctx){
+          $this->mapping = array_merge($this->mapping, $lctx['MAPPING']);
+          $this->mapping_ext = array_merge($this->mapping, $lctx['MAPPING_EXT']);
+        }
       }else{
-        $this->mapping[$key] = $value;
+        unset($this->mapping[$key]);
+        $this->mapping_ext[$key] = $value;
       }
     }
-    // TODO: only do this for new entries
-    foreach($this->mapping as &$value)
-      $value = $this->key2iri($value);
   }
 
   public function key2iri(string $key) : string {
-    if(isset($this->mapping[$key]))
-      return $this->mapping[$key];
-    @list($prefix, $ref) = explode(':', $key, 2);
-    if($ref !== null && isset($this->mapping[$prefix]))
-      return $this->mapping[$prefix] . $ref;
+    $mappings = $this->mapping + $this->mapping_ext;
+    while(true){
+      if(isset($mappings[$key])){
+        $key = $mappings[$key];
+        continue;
+      }
+      @list($prefix, $ref) = explode(':', $key, 2);
+      if($ref !== null && isset($mappings[$prefix])){
+        $key = $mappings[$prefix] . $ref;
+        continue;
+      }
+      break;
+    }
     return $key;
   }
 
-  public function iri2key(string $iri) : string{
+  public function iri2key(string $iri, array &$emaps=null) : string{
+    $mappings = $this->mapping + $this->mapping_ext;
     $result = $iri;
     $best = 0;
-    foreach($this->mapping as $key => $value){
+    foreach($mappings as $key => $value){
       if($iri == $value)
         return $key;
       if(strlen($value) <= $best)
@@ -141,7 +153,15 @@ class ContextHelper {
       if(!str_starts_with($iri, $value))
         continue;
       $best = strlen($value);
-      $result = $key.':'.substr($iri,$best);
+      $suffix = substr($iri,$best);
+      $result = $key.':'.$suffix;
+      if($emaps !== null && !isset($this->mapping[$key])){
+        $emaps[$key] = $value;
+        if(!isset($mappings[$suffix])){
+          $emaps[$suffix] = $result;
+          $result = $suffix;
+        }
+      }
     }
     return $result;
   }
@@ -153,8 +173,9 @@ class ContextHelper {
   public function merge(...$contexts){
     foreach($contexts as $context){
       $c = new ContextHelper($context);
-      $this->mapping = array_merge($this->mapping, $c->mapping);
       $this->context = array_merge($this->context, $c->context);
+      $this->mapping = array_merge($this->mapping, $c->mapping);
+      $this->mapping_ext = array_merge($this->mapping_ext, $c->mapping_ext);
     }
     return $this;
   }
@@ -172,27 +193,34 @@ function getAllParents($reflection, &$list=[]){
   return $list;
 }
 
-function g_compact_sub(array $in, ContextHelper $context){
+function g_compact_sub(array $in, ContextHelper $context, array &$emaps){
   $out = [];
   foreach($in as $key => $value){
     if($key === '@type')
-      $value = $context->iri2key($value);
+      $value = $context->iri2key($value, $emaps);
     if(is_string($key))
-      $key = $context->iri2key($key);
+      $key = $context->iri2key($key, $emaps);
     if(is_array($value))
-      $value = g_compact_sub($value, $context);
+      $value = g_compact_sub($value, $context, $emaps);
     $out[$key] = $value;
   }
   return $out;
 }
 
 function g_compact(array $in, ContextHelper $context){
-  $out = ['@context' => array_keys($context->context)];
-  if(count($out['@context']) == 0)
-    unset($out['@context']);
-  if(count($out['@context']) == 1)
-    $out['@context'] = $out['@context'][0];
-  $out = $out + g_compact_sub($in, $context);
+  $emaps = [];
+  $pmap = [];
+  $res = g_compact_sub($in, $context, $pmap);
+  $actx = array_keys($context->context);
+  if(count($pmap))
+    $actx[] = $pmap;
+  $out = [];
+  if(count($actx) == 1){
+    $out['@context'] = $actx[0];
+  }else{
+    $out['@context'] = $actx;
+  }
+  $out = $out + $res;
   return $out;
 }
 
