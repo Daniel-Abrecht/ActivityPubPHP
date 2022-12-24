@@ -1,0 +1,100 @@
+--- download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-integrity/main/vocab/security/vocabulary.ttl	2022-12-24 22:39:18.134090221 +0000
++++ download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-integrity/main/vocab/security/vocabulary.ttl	2022-12-13 21:01:29.984915766 +0000
+@@ -1,4 +1,4 @@
+-@prefix sec: <https://w3id.org/security/v1> .
++@prefix sec: <https://w3id.org/security#> .
+ @prefix cred: <https://w3.org/2018/credentials#> .
+ @prefix dc: <http://purl.org/dc/terms/> .
+ @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@@ -339,7 +339,6 @@
+ .
+ 
+ sec:controller a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Controller" ;
+     rdfs:comment """A controller is an entity that claims control over a particular resource. Note that control is best validated as a two-way relationship where the controller claims control over a particular resource, and the resource clearly identifies its controller."""@en ;
+     rdfs:isDefinedBy cred: ;
+@@ -347,7 +346,6 @@
+ 
+ sec:owner a rdf:Property, owl:DeprecatedProperty, owl:ObjectProperty ;
+     owl:deprecated true ;
+-    rdfs:range  ;
+     rdfs:label "Owner" ;
+     rdfs:comment """An owner is an entity that claims control over a particular resource. Note that ownership is best validated as a two-way relationship where the owner claims ownership over a particular resource, and the resource clearly identifies its owner."""@en ;
+     rdfs:isDefinedBy cred: ;
+@@ -371,35 +369,30 @@
+ 
+ sec:publicKey a rdfs:Property, owl:ObjectProperty ;
+     rdfs:domain sec:Key ;
+-    rdfs:range  ;
+     rdfs:label "Public Key" ;
+     rdfs:comment """A public key property is used to specify a URL that contains information about a public key."""@en ;
+     rdfs:isDefinedBy cred: ;
+ .
+ 
+ sec:verificationMethod a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Verification method" ;
+     rdfs:comment """A `verificationMethod` property is used to specify a URL that contains information used for proof verification."""@en ;
+     rdfs:isDefinedBy cred: ;
+ .
+ 
+ sec:assertionMethod a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Assertion method" ;
+     rdfs:comment """An `assertionMethod` property is used to specify a URL that contains information about a `verificationMethod` used for assertions."""@en ;
+     rdfs:isDefinedBy cred: ;
+ .
+ 
+ sec:authentication a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Authentication method" ;
+     rdfs:comment """An `authentication` property is used to specify a URL that contains information about a `verificationMethod` used for authentication."""@en ;
+     rdfs:isDefinedBy cred: ;
+ .
+ 
+ sec:capabilityDelegation a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Capability Delegation Method" ;
+     rdfs:comment """A `capabilityDelegation` property is used to express that one or more `verificationMethods` are authorized to verify cryptographic proofs that were created for the purpose of delegating capabilities.
+ A `verificationMethod` may be referenced by its identifier (a URL) or expressed in full.
+@@ -408,7 +401,6 @@
+ .
+ 
+ sec:capabilityInvocation a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Capability Invocation Method" ;
+     rdfs:comment """A `capabilityInvocation` property is used to express that one or more `verificationMethods` are authorized to verify cryptographic proofs that were created for the purpose of invoking capabilities.
+ A `verificationMethod` MAY be referenced by its identifier (a URL) or expressed in full.
+@@ -463,7 +455,6 @@
+ .
+ 
+ sec:publicKeyService a rdfs:Property, owl:ObjectProperty ;
+-    rdfs:range  ;
+     rdfs:label "Public key service" ;
+     rdfs:comment """The publicKeyService property is used to express the REST URL that provides public key management services."""@en ;
+     rdfs:isDefinedBy cred: ;
+@@ -552,7 +543,6 @@
+ sec:signatureAlgorithm a rdf:Property, owl:DeprecatedProperty, owl:ObjectProperty ;
+     owl:deprecated true ;
+     rdfs:domain sec:Signature ;
+-    rdfs:range  ;
+     rdfs:label "Signature algorithm" ;
+     rdfs:comment """The signature algorithm is used to specify the cryptographic signature function to use when digitally signing the digest data. Typically, text to be signed goes through three steps: 1) canonicalization, 2) digest, and 3) signature. This property is used to specify the algorithm that should be used for step #3. A signature class typically specifies a default signature algorithm, so this property rarely needs to be used in practice when specifying digital signatures."""@en ;
+     rdfs:isDefinedBy cred: ;
+@@ -560,7 +550,6 @@
+ 
+ sec:service a rdfs:Property, owl:ObjectProperty ;
+     rdfs:domain sec:Signature ;
+-    rdfs:range  ;
+     rdfs:label "Service" ;
+     rdfs:comment """Examples of specific services include discovery services, social networks, file storage services, and verifiable claim repository services."""@en ;
+     rdfs:isDefinedBy cred: ;
+@@ -568,7 +557,6 @@
+ 
+ sec:serviceEndpoint a rdfs:Property, owl:ObjectProperty ;
+     rdfs:domain sec:Signature ;
+-    rdfs:range  ;
+     rdfs:label "Service endpoint" ;
+     rdfs:comment """A network address at which a service operates on behalf of a controller. Examples of specific services include discovery services, social networks, file storage services, and verifiable claim repository services. Service endpoints might also be provided by a generalized data interchange protocol, such as extensible data interchange."""@en ;
+     rdfs:isDefinedBy cred: ;

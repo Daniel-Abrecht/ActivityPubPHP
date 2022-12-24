@@ -3,8 +3,9 @@ import re
 import sys
 import json
 import textwrap
+from glob import glob
 from pathlib import Path
-from rdflib import RDF, Graph, URIRef
+from rdflib import RDF, Graph, URIRef, Literal
 from itertools import chain
 
 rdf_domain = URIRef('http://www.w3.org/2000/01/rdf-schema#domain')
@@ -32,6 +33,7 @@ class Registry:
   def __init__(self, g):
     self.g = g
     self.module = { '': Module(self, '', None) }
+    self.context = {}
   def getOrCreateModule(self, ns, context):
     if ns in self.module:
       return self.module[ns]
@@ -52,6 +54,12 @@ class Registry:
     p = Property(m, uri)
     m.property[uri] = p
     return p
+  def getOrCreateContext(self, uri):
+    if uri in self.context:
+      return self.context[uri]
+    c = Context(self, uri)
+    self.context[uri] = c
+    return c
   def getModuleForURI(self, uri):
     l = -1
     m = None
@@ -68,6 +76,25 @@ class Registry:
   def serialize(self):
     for m in self.module.values():
       m.serialize()
+
+class Context:
+  def __init__(self, registry, uri):
+    self.registry = registry
+    self.g = registry.g
+    self.uri = uri
+    self.ldmap = {}
+    with open('download/context/'+self.uri,'r') as f:
+      context = json.load(f)['@context']
+      if not isinstance(context, list):
+        context = [context]
+      for ctx in context:
+        if not isinstance(ctx, dict):
+          continue
+        for k,v in ctx.items():
+          if isinstance(v, dict):
+            v = v.get('@id')
+          if isinstance(v, str) and k[0] != '@':
+            self.ldmap[k] = v
 
 class Module:
   def __init__(self, registry, uri, context):
@@ -424,17 +451,25 @@ class Property:
     return None
 Property.i = 1
 
+def sgf(g, subject):
+  return g.objects(subject, Literal("file"))
+
 def createModule(files):
   g = Graph()
+  nss = set()
   for f in files:
-    g.parse(f, format='turtle')
+    g2 = Graph()
+    print("parsing file: "+f)
+    g2.parse(f, format='turtle')
+    for s in g.subjects():
+      g.add((s, Literal("file"), Literal(f)))
+    nss |= set(ns for prefix, ns in g2.namespaces())
+    g += g2
   r = Registry(g)
-  nss = set(ns for prefix, ns in g.namespaces())
+  for s, p, o in g.triples((None, RDF.type, URIRef('http://dpa.li/ns/owl/fixes/meta#context'))):
+    r.getOrCreateContext(s)
   for ns in nss:
-    context = None
-    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#context'), None)):
-      context = o
-    m = r.getOrCreateModule(ns, context)
+    m = r.getOrCreateModule(ns, None)
     for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
       for s, p, o in g.triples((o, None, None)):
         m.setMapping(p,o)
@@ -458,4 +493,12 @@ def createModule(files):
         property.setMeta(p, o, s)
   r.serialize()
 
-createModule(sys.argv[1:])
+owl = (
+    glob('vocab/**/*.owl', recursive=True)
+  + glob('vocab/**/*.ttl', recursive=True)
+  + glob('download/vocab/**/*.owl', recursive=True)
+  + glob('download/vocab/**/*.ttl', recursive=True)
+)
+
+createModule(owl)
+

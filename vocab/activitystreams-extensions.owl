@@ -79,3 +79,31 @@ sec:publicKey a owl:DatatypeProperty;
   rdfs:range sec:Key ;
   rdfs:domain fix:Actor ;
 .
+
+
+# Other extensions used by mastodon
+
+as:Hashtag a owl:Class ;
+  rdfs:subClassOf as:Object ;
+.
+
+# Defined by DID
+#as:alsoKnownAs a owl:ObjectProperty ;
+#  rdfs:range xsd:anyURI ;
+#  rdfs:domain fix:Actor ;
+#.
+
+as:manuallyApprovesFollowers a owl:DatatypeProperty ;
+  rdfs:domain fix:Actor ;
+  rdfs:range xsd:boolean ;
+.
+
+as:movedTo a owl:DatatypeProperty ;
+  rdfs:domain fix:Actor ;
+  rdfs:range xsd:anyURI ;
+.
+
+as:sensitive a owl:DatatypeProperty ;
+  rdfs:domain as:Object ;
+  rdfs:range xsd:boolean ;
+.
