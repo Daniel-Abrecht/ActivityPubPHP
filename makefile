@@ -5,6 +5,7 @@ OWL += https\://raw.githubusercontent.com/w3c/vc-data-model/main/vocab/credentia
 OWL += https\://www.w3.org/ns/ldp.ttl
 
 CONTEXT += https\://www.w3.org/ns/activitystreams
+CONTEXT += https\://www.w3.org/ns/did/v1
 CONTEXT += https\://w3id.org/security/v1
 CONTEXT += https\://w3id.org/security/v2
 CONTEXT += https\://www.w3.org/2018/credentials/v1
@@ -16,8 +17,8 @@ DOWNLOAD += $(patsubst %,download/vocab/%,$(OWL))
 all: auto/.done
 
 download/.done: $(DOWNLOAD)
-	patch download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-integrity/main/vocab/security/vocabulary.ttl <patch/security.ttl.patch
-	patch download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-model/main/vocab/credentials/credentials.ttl <patch/credentials.ttl.patch
+	-patch download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-integrity/main/vocab/security/vocabulary.ttl <patch/security.ttl.patch
+	-patch download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-model/main/vocab/credentials/credentials.ttl <patch/credentials.ttl.patch
 	touch $@
 
 download/context/%:
