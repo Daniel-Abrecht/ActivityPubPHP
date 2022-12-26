@@ -280,12 +280,16 @@ function getIRItoNameMap(POJO|string $o){
         continue;
       $prop = $attr->newInstance();
       $prop->name = $name;
-      $info[$prop->iri] = $prop;
+      $info[preg_replace('/^https?:/','http?:',$prop->iri)] = $prop;
     }
   }
   ksort($info);
   $g_iri_map[$o] = $info;
   return $info;
+}
+
+function iri_map_get($iri_map, $iri){
+  return @$iri_map[preg_replace('/^https?:/','http?:',$iri)];
 }
 
 function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
@@ -294,7 +298,7 @@ function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void 
   $iri_map = getIRItoNameMap($o);
   foreach($a as $key => $value){
     $key = $context->key2iri($key);
-    $entry = @$iri_map[$key];
+    $entry = iri_map_get($iri_map, $key);
     if(!$entry){
       if($key[0] != '@')
         trigger_error("No mapping for IRI: $key\n");

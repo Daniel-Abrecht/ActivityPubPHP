@@ -27,6 +27,8 @@ echo \auto\unserialize('
     "https://w3id.org/security/v1"
   ],
   "type": "Person",
+  "inbox": "https://example.com/inbox",
+  "outbox": "https://example.com/outbox",
   "preferredUsername": "Hello World!",
   "icon": [
     {

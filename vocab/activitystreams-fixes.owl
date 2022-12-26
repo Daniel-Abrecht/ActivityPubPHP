@@ -8,6 +8,7 @@
 @prefix xml: <http://www.w3.org/XML/1998/namespace> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
 @base <http://dpa.li/ns/owl/fixes/activitystreams> .
 
 ###
@@ -23,15 +24,9 @@
 ###
 
 <https://www.w3.org/ns/activitystreams> a meta:context;
-  meta:ldmap meta:ldmap-as ;
-.
-
-meta:ldmap-as
-  "xsd"   <http://www.w3.org/2001/XMLSchema#>;
-  "as"    <https://www.w3.org/ns/activitystreams#>;
-  "ldp"   <http://www.w3.org/ns/ldp#>;
-  "vcard" <http://www.w3.org/2006/vcard/ns#>;
-  "type"  "@type";
+  meta:target-ontology as: ;
+  meta:target-file "vocab/activitystreams-fixes.owl" ;
+  meta:target-file "vocab/activitystreams-extensions.owl" ;
 .
 
 as:id owl:equivalentProperty "@id" .
@@ -64,6 +59,7 @@ fix:inbox a owl:DatatypeProperty;
     owl:unionOf ( as:OrderedCollection as:Link )
   ] ;
   rdfs:domain fix:Actor ;
+  owl:equivalentProperty ldp:inbox ;
 .
 
 fix:outbox a owl:DatatypeProperty;

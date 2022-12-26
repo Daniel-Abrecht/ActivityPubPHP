@@ -2,11 +2,13 @@
 OWL += https\://raw.githubusercontent.com/w3c/activitystreams/master/vocabulary/activitystreams2.owl
 OWL += https\://raw.githubusercontent.com/w3c/vc-data-integrity/main/vocab/security/vocabulary.ttl
 OWL += https\://raw.githubusercontent.com/w3c/vc-data-model/main/vocab/credentials/credentials.ttl
+OWL += https\://www.w3.org/ns/ldp.ttl
 
 CONTEXT += https\://www.w3.org/ns/activitystreams
 CONTEXT += https\://w3id.org/security/v1
 CONTEXT += https\://w3id.org/security/v2
 CONTEXT += https\://www.w3.org/2018/credentials/v1
+CONTEXT += https\://www.w3.org/ns/ldp
 
 DOWNLOAD += $(patsubst %,download/context/%,$(CONTEXT))
 DOWNLOAD += $(patsubst %,download/vocab/%,$(OWL))
@@ -33,4 +35,4 @@ auto/.done: download/.done
 	./mkphpclass.py
 
 clean:
-	rm -rf auto/
+	rm -rf auto/ download/

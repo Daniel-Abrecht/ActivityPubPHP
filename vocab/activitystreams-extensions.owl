@@ -11,10 +11,10 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix toot: <http://joinmastodon.org/ns#> .
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
 @base <http://dpa.li/ns/owl/extension/activitystreams#> .
 
-as: meta:ldext meta:ldext-as .
-
+<https://www.w3.org/ns/activitystreams> meta:ldmap meta:ldext-as .
 meta:ldext-as
   "toot" toot: ;
 .

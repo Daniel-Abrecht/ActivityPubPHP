@@ -11,6 +11,7 @@ from itertools import chain
 rdf_domain = URIRef('http://www.w3.org/2000/01/rdf-schema#domain')
 owl_Class = URIRef("http://www.w3.org/2002/07/owl#Class")
 rdfs_Class = URIRef("http://www.w3.org/2000/01/rdf-schema#Class")
+owl_Ontology = URIRef("http://www.w3.org/2002/07/owl#Ontology")
 owl_DatatypeProperty = URIRef("http://www.w3.org/2002/07/owl#DatatypeProperty")
 owl_ObjectProperty = URIRef("http://www.w3.org/2002/07/owl#ObjectProperty")
 owl_FunctionalProperty = URIRef("http://www.w3.org/2002/07/owl#FunctionalProperty")
@@ -18,6 +19,7 @@ owl_Datatype = URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")
 owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty]
 owl_equivalentProperty = URIRef("http://www.w3.org/2002/07/owl#equivalentProperty")
 owl_sameAs = URIRef("http://www.w3.org/2002/07/owl#sameAs")
+dpa_context = URIRef('http://dpa.li/ns/owl/fixes/meta#context')
 
 wrapper = textwrap.TextWrapper(width=80-5)
 
@@ -83,8 +85,6 @@ class Context:
     self.uri = uri
     self.ldmap = {}
     self.ldext = {}
-    self.classes = {}
-    self.property = {}
     with open('download/context/'+self.uri,'r') as f:
       context = json.load(f)['@context']
       if not isinstance(context, list):
@@ -97,6 +97,9 @@ class Context:
             v = v.get('@id')
           if isinstance(v, str) and k[0] != '@':
             self.ldmap[k] = v
+    for s, p, o in self.g['*'].triples((self.uri, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
+      for s, p, o in self.g['*'].triples((o, None, None)):
+        self.ldext[p] = o
   def getAbsNS(self):
     return '\\'.join(split_uri(self.uri))
   def getDirPath(self):
@@ -104,6 +107,27 @@ class Context:
   def getAbsPath(self):
     return self.getDirPath() + '/__module__.mod'
   def serialize(self):
+    ldext_c = {}
+    ldext_p = {}
+    ldext_a = {}
+    for cls in self.registry.classes.values():
+      if self.uri not in cls.context:
+        continue
+      ldext_c[cls.getName()] = cls.uri
+    for prop in self.registry.property.values():
+      if self.uri not in prop.context:
+        continue
+      ldext_p[prop.getName()] = prop.uri
+      for uri in prop.uris:
+        uname = getName(uri)
+        ldext_p[uname] = prop.uri
+        ldext_a[uri] = prop.uri
+    ldext = dict(
+        sorted(ldext_c.items())
+      + sorted(ldext_p.items())
+      + sorted(ldext_a.items())
+    )
+    ldext = dict((k,v) for k,v in ldext.items() if str(k) != str(v) and k not in self.ldmap)
     s = """\
 <?php
 
@@ -123,7 +147,7 @@ class __module__ {
     ],
     "MAPPING_EXT" => [
 """
-    for prefix, value in self.ldext.items():
+    for prefix, value in chain(self.ldext.items(), ldext.items()):
       s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
     s += """\
     ]
@@ -139,7 +163,7 @@ def getRdfObjectList(g, first):
   while n and n != URIRef('http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'):
     c = n
     n = None
-    for s, p, o in g.triples((c, None, None)):
+    for s, p, o in g['*'].triples((c, None, None)):
       if p == URIRef('http://www.w3.org/1999/02/22-rdf-syntax-ns#rest'):
         n = o
       elif p == URIRef('http://www.w3.org/1999/02/22-rdf-syntax-ns#first'):
@@ -158,16 +182,15 @@ class Class:
     self.implements = []
     self.property = {}
     self.label = None
-    self.extra_context = set()
   def addProperty(self, iri, property):
-    if property.context:
-      self.extra_context |= property.context
     self.property[iri] = property
   def setMeta(self, key, value):
     if   key == URIRef('http://www.w3.org/2000/01/rdf-schema#label'):
       self.label = value
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#comment'):
       self.comment.append(value)
+    elif key == dpa_context:
+      self.context.add(value)
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#subClassOf'):
       self.implements.append(self.registry.getOrCreateClass(value))
     elif key == URIRef('http://www.w3.org/2002/07/owl#unionOf'):
@@ -218,7 +241,10 @@ class Class:
     parts = set(t.getAbsNS('I') for t in self.getConstituents())
     return parts
   def serialize(self):
-    extra_context = sorted(self.extra_context)
+    extra_context = set()
+    for p in self.property.values():
+      extra_context |= p.context
+    extra_context = sorted(extra_context)
     if self.kind != 'class':
       return
     nt = native_types.get(str(self.uri)) or [None, None, None]
@@ -254,7 +280,7 @@ class Class:
       st = property.getType()
       pp = json.dumps(property.uri)
       pp += ',' + json.dumps(st.uri if st else None)
-      pp += ',['+','.join(f'EC{self.i}[{extra_context.index(str(s))}]' for s in property.context)+']'
+      pp += ',['+','.join(f'EC{self.i}[{extra_context.index(s)}]' for s in property.context)+']'
       s += '  #[\\auto\\Property('+pp+')]\n'
       s += '  public function get_'+pname+'()'
       if t:
@@ -270,6 +296,7 @@ class Class:
       s += 'abstract class A_' + self.getName() + ' implements D_' + self.getName() + ' {\n'
     else:
       s += 'class C_' + self.getName() + ' implements I_' + self.getName() + ' {\n'
+    pvs = set()
     for piri, property in self.getAllProperties().items():
       pname = getName(piri)
       cname = property.getName()
@@ -278,7 +305,8 @@ class Class:
       if property.type:
         t  = property.genTypeConstraint()
         tv = property.genTypeConstraint(True)
-      if piri == property.uri:
+      if property not in pvs:
+        pvs.add(property)
         s += '  private '+t+' $var_'+cname
         if   property.isArray():
           s += ' = []'
@@ -353,8 +381,8 @@ class Property:
       self.comment.append(value)
     elif key == rdf_domain:
       if str(value) == '*':
-        for s, p, o in chain(self.g.triples((None, RDF.type, owl_Class)),
-                             self.g.triples((None, RDF.type, rdfs_Class))):
+        for s, p, o in chain(self.g['*'].triples((None, RDF.type, owl_Class)),
+                             self.g['*'].triples((None, RDF.type, rdfs_Class))):
           self.setMeta(key, s, alias)
       else:
         cls = self.registry.getOrCreateClass(value)
@@ -368,6 +396,8 @@ class Property:
         self.functionalproperty = True
       elif value == owl_ObjectProperty:
         self.objectproperty = True
+    elif key == dpa_context:
+      self.context.add(value)
   def sameAs(self, value):
     if value in self.registry.property:
       prev = self.registry.property[value]
@@ -399,9 +429,6 @@ class Property:
     return None
 Property.i = 1
 
-def sgf(g, subject):
-  return g.objects(subject, Literal("file"))
-
 def fixup(x):
   if not isinstance(x, URIRef):
     return x
@@ -412,38 +439,58 @@ def fixup(x):
       x = URIRef(new + x[len(old):])
   return x
 
+def filesof(g, t):
+  res = set()
+  for f, g in g.items():
+    if f != '*' and (t in g):
+      res.add(f)
+  return res
+
 def generate(files):
-  g = Graph()
-  nss = set()
+  ga = Graph()
+  g = {}
   for f in files:
-    g2 = Graph()
     print("parsing file: "+f)
+    g2 = Graph()
+    g3 = Graph()
     g2.parse(f, format='turtle')
-    for s in g.subjects():
-      g.add((s, Literal("file"), Literal(f)))
-    nss |= set(ns for prefix, ns in g2.namespaces())
     for s, p, o in g2:
       s=fixup(s)
       p=fixup(p)
       o=fixup(o)
-      g.add((s,p,o))
+      g3.add((s,p,o))
+    g[f] = g3
+    ga += g3
+  g['*'] = ga
   r = Registry(g)
-  for s, p, o in g.triples((None, RDF.type, URIRef('http://dpa.li/ns/owl/fixes/meta#context'))):
-    r.getOrCreateContext(s)
-  for s, p, o in chain(g.triples((None, RDF.type, owl_Class)),
-                       g.triples((None, RDF.type, rdfs_Class))):
+  for context, p, o in g['*'].triples((None, RDF.type, dpa_context)):
+    r.getOrCreateContext(context)
+    files = set()
+    for s, p, o in g['*'].triples((context, URIRef('http://dpa.li/ns/owl/fixes/meta#target-ontology'), None)):
+      files |= filesof(g, (o, RDF.type, owl_Ontology))
+      if not files:
+        print(f"no file found containing ontology <{o}>", file=sys.stderr)
+    for s, p, o in g['*'].triples((context, URIRef('http://dpa.li/ns/owl/fixes/meta#target-file'), None)):
+      files.add(str(o))
+    for f in files:
+      for s in g[f].subjects():
+        t = (s, dpa_context, context)
+        g[f].add(t)
+        g['*'].add(t)
+  for s, p, o in chain(g['*'].triples((None, RDF.type, owl_Class)),
+                       g['*'].triples((None, RDF.type, rdfs_Class))):
     ci = r.getOrCreateClass(s)
-    for s, p, o in g.triples((s, None, None)):
+    for s, p, o in g['*'].triples((s, None, None)):
       ci.setMeta(p, o)
   for pt in owl_properties:
-    for s, p, o in g.triples((None, RDF.type, pt)):
-      for s, p, o in chain(g.triples((s, owl_equivalentProperty, None)),
-                           g.triples((s, owl_sameAs, None))):
+    for s, p, o in g['*'].triples((None, RDF.type, pt)):
+      for s, p, o in chain(g['*'].triples((s, owl_equivalentProperty, None)),
+                           g['*'].triples((s, owl_sameAs, None))):
         property = r.getOrCreateProperty(s)
         property.sameAs(o)
       property = r.getOrCreateProperty(s)
       property.setMeta('kind', pt, s)
-      for s, p, o in chain(g.triples((s, None, None))):
+      for s, p, o in chain(g['*'].triples((s, None, None))):
         property.setMeta(p, o, s)
   r.serialize()
 
