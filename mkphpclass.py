@@ -25,34 +25,44 @@ with open("auto/override_meta.json",'r') as f:
   native_types = json.load(f)
 
 def escape_id(s):
-  s = re.sub('[^a-zA-Z0-9_\x7f-\xff\\\\]', '_', s)
-  s = re.sub('([/\\\\])([0-9])', '\\1_\\2', s)
+  s = re.sub('[^a-zA-Z0-9_\x7f-\xff\\\\/]', '_', s)
+  s = re.sub('([/\\\\]|^)([0-9])', '\\1_\\2', s)
+  s = re.sub('([/\\\\])+', '\\1', s)
   return s
+
+def split_uri(uri, t=None, rla=False):
+  parts = re.split('[/\\\\#?=]+', uri)
+  if len(parts) == 1:
+    parts.insert(0, 'anonymous')
+  if parts[0][-1] == ':':
+    parts = parts[1:]
+  if t:
+    parts[-1] = t + '_' + parts[-1]
+  if rla:
+    parts = parts[:-1]
+  parts.insert(0, 'auto')
+  return [escape_id(part) for part in parts if part not in ['','.','..']]
+
+def getName(uri):
+  return split_uri(uri)[-1]
 
 class Registry:
   def __init__(self, g):
     self.g = g
-    self.module = { '': Module(self, '', None) }
     self.context = {}
-  def getOrCreateModule(self, ns, context):
-    if ns in self.module:
-      return self.module[ns]
-    m = Module(self, ns, context)
-    self.module[ns] = m
-    return m
+    self.classes = {}
+    self.property = {}
   def getOrCreateClass(self, uri):
-    m = self.getModuleForURI(uri)
-    if uri in m.classes:
-      return m.classes[uri]
-    cls = Class(m, uri)
-    m.classes[uri] = cls
+    if uri in self.classes:
+      return self.classes[uri]
+    cls = Class(self, uri)
+    self.classes[uri] = cls
     return cls
   def getOrCreateProperty(self, uri):
-    m = self.getModuleForURI(uri)
-    if uri in m.property:
-      return m.property[uri]
-    p = Property(m, uri)
-    m.property[uri] = p
+    if uri in self.property:
+      return self.property[uri]
+    p = Property(self, uri)
+    self.property[uri] = p
     return p
   def getOrCreateContext(self, uri):
     if uri in self.context:
@@ -60,22 +70,11 @@ class Registry:
     c = Context(self, uri)
     self.context[uri] = c
     return c
-  def getModuleForURI(self, uri):
-    l = -1
-    m = None
-    for k,v in self.module.items():
-      if l < len(k) and uri.startswith(k):
-        m = v
-        l = len(k)
-    return m
-  def getName(self,uri):
-    m = self.getModuleForURI(uri)
-    if not m:
-      return None
-    return [str(m.uri), uri[len(m.uri):]]
   def serialize(self):
-    for m in self.module.values():
-      m.serialize()
+    for v in self.classes.values():
+      v.serialize()
+    for v in self.context.values():
+      v.serialize()
 
 class Context:
   def __init__(self, registry, uri):
@@ -83,6 +82,9 @@ class Context:
     self.g = registry.g
     self.uri = uri
     self.ldmap = {}
+    self.ldext = {}
+    self.classes = {}
+    self.property = {}
     with open('download/context/'+self.uri,'r') as f:
       context = json.load(f)['@context']
       if not isinstance(context, list):
@@ -95,99 +97,42 @@ class Context:
             v = v.get('@id')
           if isinstance(v, str) and k[0] != '@':
             self.ldmap[k] = v
-
-class Module:
-  def __init__(self, registry, uri, context):
-    self.uri = uri
-    self.context = context
-    self.registry = registry
-    self.g = registry.g
-    self.classes = {}
-    self.property = {}
-    self.ldmap = {}
-    self.ldext = {}
-  def getNamespace(self):
-    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.uri)
-    if not parts:
-      return 'auto\\anonymous'
-    return 'auto\\'+escape_id(parts[3].replace('/','\\'))
-  def getContextNamespace(self):
-    if not self.context:
-      return None
-    parts = re.match('^([^:]*:(//)?)([^#]*)(#(.*))?$', self.context)
-    if not parts:
-      return None
-    return 'auto\\'+escape_id(parts[3].replace('/','\\'))
-  def setMapping(self, prefix, value):
-    self.ldmap[str(prefix)] = str(value)
-  def setMappingExt(self, prefix, value):
-    self.ldext[str(prefix)] = str(value)
+  def getAbsNS(self):
+    return '\\'.join(split_uri(self.uri))
+  def getDirPath(self):
+    return '/'.join(split_uri(self.uri))
+  def getAbsPath(self):
+    return self.getDirPath() + '/__module__.mod'
   def serialize(self):
-    if len(self.classes) == 0:
-      return;
-    path = self.getNamespace().replace('\\','/')
-    Path(path).mkdir(parents=True, exist_ok=True)
-    contextPath = self.getContextNamespace()
-    if contextPath:
-      contextPath = contextPath.replace('\\','/')
-      Path(contextPath).mkdir(parents=True, exist_ok=True)
-      with open(contextPath+'/__module__.mod', 'w') as f:
-        ldmap_n = {}
-        ldmap_c = {}
-        ldmap_p = {}
-        ldmap_a = {}
-        for prefix, value in self.ldmap.items():
-          ldmap_n[prefix] = value
-        for cls in self.classes.values():
-          ldmap_c[cls.name] = cls.uri
-        for prop in self.property.values():
-          if prop.name != str(prop.uri):
-            ldmap_p[prop.name] = prop.uri
-          for uri in prop.uris:
-            if prop.uri != uri:
-              uprefix, uname = self.registry.getName(uri)
-              ldmap_p[uname] = prop.uri
-              ldmap_a[uri] = prop.uri
-        ldmap = dict(
-            sorted(ldmap_n.items())
-          + sorted(ldmap_c.items())
-          + sorted(ldmap_p.items())
-          + sorted(ldmap_a.items())
-        )
-        s = """\
+    s = """\
 <?php
 
 declare(strict_types = 1);
-namespace """+self.getContextNamespace()+""";
+namespace """+self.getAbsNS()+""";
 
 class __module__ {
   const META = [
-    "CONTEXT" => """+json.dumps(self.context)+""",
-    "PREFIX" => """+json.dumps(self.uri)+""",
+    "CONTEXT" => """+json.dumps(self.uri)+""",
 """
-        s += """\
+    s += """\
     "MAPPING" => [
 """
-        for prefix, value in ldmap.items():
-          s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
-        s += """\
+    for prefix, value in self.ldmap.items():
+      s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
+    s += """\
     ],
     "MAPPING_EXT" => [
 """
-        for prefix, value in self.ldext.items():
-          s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
-        s += """\
+    for prefix, value in self.ldext.items():
+      s += '      ' + json.dumps(prefix) + " => " + json.dumps(value) + ',\n'
+    s += """\
     ]
   ];
 }
 """
-        print(s, file=f)
-    for v in self.classes.values():
-      s = v.serialize()
-      if not s:
-        continue
-      with open(path+'/'+escape_id(v.name)+'.mod', 'w') as f:
-        print(s, file=f)
+    Path(self.getDirPath()).mkdir(parents=True, exist_ok=True)
+    with open(self.getAbsPath(), 'w') as f:
+      print(s, file=f)
 
 def getRdfObjectList(g, first):
   n = first
@@ -201,59 +146,61 @@ def getRdfObjectList(g, first):
         yield o
 
 class Class:
-  def __init__(self, module, uri):
+  def __init__(self, registry, uri):
     Class.i += 1
     self.i = Class.i
+    self.g = registry.g
     self.kind = 'class'
-    self.module = module
-    self.g = module.g
+    self.context = set()
+    self.registry = registry
     self.uri = uri
     self.comment = []
     self.implements = []
     self.property = {}
     self.label = None
     self.extra_context = set()
-    if self.uri.startswith(self.module.uri):
-      self.name = self.uri[len(self.module.uri):]
-    else:
-      self.name = f'Anonymous{self.i}'
-    if self.name == '@id':
-      raise Exception("Huh")
   def addProperty(self, iri, property):
-    if property.module.context:
-      self.extra_context.add(str(property.module.context))
+    if property.context:
+      self.extra_context |= property.context
     self.property[iri] = property
-  def getNamespace(self):
-    return self.module.getNamespace()
   def setMeta(self, key, value):
     if   key == URIRef('http://www.w3.org/2000/01/rdf-schema#label'):
       self.label = value
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#comment'):
       self.comment.append(value)
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#subClassOf'):
-      self.implements.append(self.module.registry.getOrCreateClass(value))
+      self.implements.append(self.registry.getOrCreateClass(value))
     elif key == URIRef('http://www.w3.org/2002/07/owl#unionOf'):
       self.kind = 'union'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.module.registry.getOrCreateClass(t))
+        self.implements.append(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#intersectionOf'):
       self.kind = 'intersection'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.module.registry.getOrCreateClass(t))
+        self.implements.append(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#complementOf'):
       self.kind = 'complement'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.module.registry.getOrCreateClass(t))
+        self.implements.append(self.registry.getOrCreateClass(t))
   def getAbsNS(self, t='I'):
     if t == 'I' and str(self.uri) in native_types and native_types[str(self.uri)][0]:
       return native_types[str(self.uri)][0]
-    return '\\'+self.getNamespace()+'\\'+t+'_'+escape_id(self.name)
+    s = '\\'.join(split_uri(self.uri, t, not t))
+    if t:
+      s = '\\' + s
+    return s
+  def getName(self):
+    return getName(self.uri)
+  def getDirPath(self):
+    return '/'.join(split_uri(self.uri)[:-1])
+  def getAbsPath(self):
+    return '/'.join(split_uri(self.uri)) + '.mod'
   def getConstituents(self):
     res = set()
     if   self.kind == 'class':
       res.add(self)
       if str(self.uri) in native_types and native_types[str(self.uri)][2]:
-        res.add(self.module.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string')))
+        res.add(self.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string')))
     elif self.kind == 'union':
       for t in self.implements:
         res |= t.getConstituents()
@@ -268,7 +215,7 @@ class Class:
         res |= t.getInstTypes()
     return res
   def genTypeConstraint(self):
-    parts = set(t.getAbsNS() for t in self.getConstituents())
+    parts = set(t.getAbsNS('I') for t in self.getConstituents())
     return parts
   def serialize(self):
     extra_context = sorted(self.extra_context)
@@ -279,7 +226,7 @@ class Class:
       return
     s = '<?php\n\n'
     s += 'declare(strict_types = 1);\n'
-    s += 'namespace '+self.getNamespace()+';\n\n'
+    s += 'namespace '+self.getAbsNS(None)+';\n\n'
     if extra_context:
       s += f'const EC{self.i} = {json.dumps(extra_context)};\n\n'
     if self.comment:
@@ -288,16 +235,15 @@ class Class:
       s += 'interface D_'
     else:
       s += 'interface I_'
-    s += escape_id(self.name)+' extends \\auto\\POJO'
+    s += self.getName()+' extends \\auto\\POJO'
     if len(self.implements):
       s += ', '
-      s += ', '.join([cls.getAbsNS() for cls in self.implements])
+      s += ', '.join([cls.getAbsNS('I') for cls in self.implements])
     s += ' {\n'
-    s += '  const NS = '+json.dumps(self.module.context)+';\n'
+    s += '  const NS = '+json.dumps(sorted(self.context))+';\n'
     s += '  const IRI = '+json.dumps(self.uri)+';\n\n'
     for piri, property in self.property.items():
-      pprefix, pname = self.module.registry.getName(piri)
-      pname = escape_id(pname)
+      pname = getName(piri)
       if property.comment:
         s += '  /**\n' + ''.join([f"   * {s}\n" for s in wrapper.wrap(text='\n'.join(property.comment))]) + '   */\n'
       t  = ''
@@ -308,7 +254,7 @@ class Class:
       st = property.getType()
       pp = json.dumps(property.uri)
       pp += ',' + json.dumps(st.uri if st else None)
-      pp += f',EC{self.i}[{extra_context.index(str(property.module.context))}]' if property.module.context else ',null'
+      pp += ',['+','.join(f'EC{self.i}[{extra_context.index(str(s))}]' for s in property.context)+']'
       s += '  #[\\auto\\Property('+pp+')]\n'
       s += '  public function get_'+pname+'()'
       if t:
@@ -321,13 +267,12 @@ class Class:
       s += '\n'
     s += '}\n\n'
     if nt[2]:
-      s += 'abstract class A_' + escape_id(self.name) + ' implements D_' + escape_id(self.name) + ' {\n'
+      s += 'abstract class A_' + self.getName() + ' implements D_' + self.getName() + ' {\n'
     else:
-      s += 'class C_' + escape_id(self.name) + ' implements I_' + escape_id(self.name) + ' {\n'
+      s += 'class C_' + self.getName() + ' implements I_' + self.getName() + ' {\n'
     for piri, property in self.getAllProperties().items():
-      pprefix, pname = self.module.registry.getName(piri)
-      pname = escape_id(pname)
-      cname = escape_id(property.name)
+      pname = getName(piri)
+      cname = property.getName()
       t  = ''
       tv = ''
       if property.type:
@@ -370,7 +315,9 @@ class Class:
     s += '}\n'
     if nt[2]:
       s += '\\auto\\load(' + json.dumps(nt[2]) + ');';
-    return s
+    Path(self.getDirPath()).mkdir(parents=True, exist_ok=True)
+    with open(self.getAbsPath(), 'w') as f:
+      print(s, file=f)
   def getAllProperties(self):
     properties = {}
     for parent in self.implements:
@@ -382,11 +329,12 @@ class Class:
 Class.i = 0
 
 class Property:
-  def __init__(self, module, uri):
+  def __init__(self, registry, uri):
     Property.i += 1
     self.i = Property.i
-    self.module = module
-    self.g = module.g
+    self.context = set()
+    self.registry = registry
+    self.g = registry.g
     self.classes = set()
     self.uri = uri
     self.uris = {self.uri}
@@ -396,10 +344,11 @@ class Property:
     self.objectproperty = False
     self.datatypeproperty = False
     self.functionalproperty = False
-    self.prefix, self.name = self.module.registry.getName(self.uri)
+  def getName(self):
+    return getName(self.uri)
   def setMeta(self, key, value, alias):
     if key == URIRef('http://www.w3.org/2000/01/rdf-schema#range'):
-      self.type = self.module.registry.getOrCreateClass(value)
+      self.type = self.registry.getOrCreateClass(value)
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#comment'):
       self.comment.append(value)
     elif key == rdf_domain:
@@ -408,7 +357,7 @@ class Property:
                              self.g.triples((None, RDF.type, rdfs_Class))):
           self.setMeta(key, s, alias)
       else:
-        cls = self.module.registry.getOrCreateClass(value)
+        cls = self.registry.getOrCreateClass(value)
         for cls in cls.getConstituents():
           self.classes.add(cls)
           cls.addProperty(alias or self.uri, self)
@@ -420,14 +369,13 @@ class Property:
       elif value == owl_ObjectProperty:
         self.objectproperty = True
   def sameAs(self, value):
-    if value in self.module.property:
-      prev = self.module.property[value]
-      self.module.property[self.uri] = prev
+    if value in self.registry.property:
+      prev = self.registry.property[value]
+      self.registry.property[self.uri] = prev
       prev.uris.add(self.uri)
     else:
-      self.module.property[value] = self
+      self.registry.property[value] = self
       self.uri = value
-      self.prefix, self.name = self.module.registry.getName(self.uri)
       self.uris.add(value)
   def genTypeConstraint(self, varadic=False):
     if not self.type:
@@ -454,7 +402,17 @@ Property.i = 1
 def sgf(g, subject):
   return g.objects(subject, Literal("file"))
 
-def createModule(files):
+def fixup(x):
+  if not isinstance(x, URIRef):
+    return x
+  for old, new in ({
+    "http://www.w3.org/ns/activitystreams#": "https://www.w3.org/ns/activitystreams#" # They absolutely wrecked it all with this change...
+  }).items():
+    if x.startswith(old, new):
+      x = URIRef(new + x[len(old):])
+  return x
+
+def generate(files):
   g = Graph()
   nss = set()
   for f in files:
@@ -464,18 +422,14 @@ def createModule(files):
     for s in g.subjects():
       g.add((s, Literal("file"), Literal(f)))
     nss |= set(ns for prefix, ns in g2.namespaces())
-    g += g2
+    for s, p, o in g2:
+      s=fixup(s)
+      p=fixup(p)
+      o=fixup(o)
+      g.add((s,p,o))
   r = Registry(g)
   for s, p, o in g.triples((None, RDF.type, URIRef('http://dpa.li/ns/owl/fixes/meta#context'))):
     r.getOrCreateContext(s)
-  for ns in nss:
-    m = r.getOrCreateModule(ns, None)
-    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
-      for s, p, o in g.triples((o, None, None)):
-        m.setMapping(p,o)
-    for s, p, o in g.triples((ns, URIRef('http://dpa.li/ns/owl/fixes/meta#ldext'), None)):
-      for s, p, o in g.triples((o, None, None)):
-        m.setMappingExt(p,o)
   for s, p, o in chain(g.triples((None, RDF.type, owl_Class)),
                        g.triples((None, RDF.type, rdfs_Class))):
     ci = r.getOrCreateClass(s)
@@ -500,5 +454,5 @@ owl = (
   + glob('download/vocab/**/*.ttl', recursive=True)
 )
 
-createModule(owl)
+generate(owl)
 

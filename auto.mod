@@ -42,7 +42,7 @@ class Property {
   function __construct(
     public string $iri,
     public string|null $defaultType = null,
-    public string|null $context = null
+    public array $context = []
   ){}
 }
 
@@ -122,6 +122,9 @@ class ContextHelper {
         $this->mapping_ext[$key] = $value;
       }
     }
+    foreach($this->mapping as &$value)
+      $value = $this->key2iri($value);
+    unset($value);
   }
 
   public function key2iri(string $key) : string {
@@ -230,7 +233,9 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
     $context = new ContextHelper();
   $map = getIRItoNameMap($o);
   $result = [];
-  $contexts = [@$o::NS => INF];
+  $contexts = [];
+  foreach(@$o::NS??[] as $ctx)
+    $contexts[$ctx] = INF;
   foreach($map as $entry){
     $value = $o->{'get_'.$entry->name}();
     if($value === null || (is_array($value) && count($value) == 0))
@@ -249,7 +254,8 @@ function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
       $value = $value[0];
     if(!isset($result[$entry->iri])){
       $result[$entry->iri] = $value;
-      $contexts[$entry->context] = @$contexts[$entry->context] + 1;
+      foreach($entry->context as $ctx)
+        $contexts[$ctx] = @$contexts[$ctx] + 1;
     }
   }
   asort($contexts);
