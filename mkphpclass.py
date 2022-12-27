@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import re
 import sys
 import json
@@ -11,6 +12,7 @@ from itertools import chain
 rdf_domain = URIRef('http://www.w3.org/2000/01/rdf-schema#domain')
 owl_Class = URIRef("http://www.w3.org/2002/07/owl#Class")
 rdfs_Class = URIRef("http://www.w3.org/2000/01/rdf-schema#Class")
+rdfs_Datatype = URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")
 owl_Ontology = URIRef("http://www.w3.org/2002/07/owl#Ontology")
 owl_DatatypeProperty = URIRef("http://www.w3.org/2002/07/owl#DatatypeProperty")
 owl_ObjectProperty = URIRef("http://www.w3.org/2002/07/owl#ObjectProperty")
@@ -67,6 +69,7 @@ class Registry:
     self.property[uri] = p
     return p
   def getOrCreateContext(self, uri):
+    uri = URIRef(uri)
     if uri in self.context:
       return self.context[uri]
     c = Context(self, uri)
@@ -77,6 +80,33 @@ class Registry:
       v.serialize()
     for v in self.context.values():
       v.serialize()
+  def info(self):
+    in_ontology = {str(x) for x in chain(self.classes.keys(), self.property.keys()) if ':' in x}
+    for context in self.context.values():
+      print(f"Checking for context entries not in any ontology in context <{context.uri}>")
+      for iri in sorted(set(context.fldmap.values())):
+        if ':' not in iri:
+          continue
+        if str(iri) not in in_ontology:
+          print('  '+str(iri))
+    in_context = set()
+    for y in self.context.values():
+      for x in y.fldmap.values():
+        if ':' in x:
+          in_context.add(str(x))
+    for cls in self.classes.values():
+      missing = set()
+      if not cls.context:
+        continue
+      if ':' in cls.uri and str(cls.uri) not in in_context:
+        missing.add(str(cls.uri))
+      for iri, prop in cls.property.items():
+        if ':' in iri and str(iri) not in in_context:
+          missing.add(str(iri))
+      if missing:
+        print(f"IRIs not in any context for class <{cls.uri}>");
+        for x in sorted(missing):
+          print('  '+x)
 
 class Context:
   def __init__(self, registry, uri):
@@ -84,12 +114,16 @@ class Context:
     self.g = registry.g
     self.uri = uri
     self.ldmap = {}
+    self.fldmap = {}
     self.ldext = {}
     with open('download/context/'+self.uri,'r') as f:
       context = json.load(f)['@context']
       if not isinstance(context, list):
         context = [context]
       for ctx in context:
+        if isinstance(ctx, str):
+          mc = self.registry.getOrCreateContext(ctx)
+          self.ldmap = {**self.ldmap, **mc.ldmap}
         if not isinstance(ctx, dict):
           continue
         for k,v in ctx.items():
@@ -97,9 +131,25 @@ class Context:
             v = v.get('@id')
           if isinstance(v, str) and k[0] != '@':
             self.ldmap[k] = v
+    self.fldmap = self.ldmap
+    for k,v in self.fldmap.items():
+      self.fldmap[k] = self.expand(v)
     for s, p, o in self.g['*'].triples((self.uri, URIRef('http://dpa.li/ns/owl/fixes/meta#ldmap'), None)):
       for s, p, o in self.g['*'].triples((o, None, None)):
         self.ldext[p] = o
+  def expand(self, key):
+    while True:
+      if key in self.fldmap:
+        key = self.fldmap[key]
+        continue
+      x = [*key.split(':',1),None]
+      prefix = x[0]
+      ref = x[1]
+      if ref is not None and prefix in self.fldmap:
+        key = self.fldmap[prefix] + ref
+        continue
+      break
+    return key
   def getAbsNS(self):
     return '\\'.join(split_uri(self.uri))
   def getDirPath(self):
@@ -199,6 +249,10 @@ class Class:
         self.implements.append(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#intersectionOf'):
       self.kind = 'intersection'
+      for t in getRdfObjectList(self.g, value):
+        self.implements.append(self.registry.getOrCreateClass(t))
+    elif key == URIRef('http://www.w3.org/2002/07/owl#complementOf'):
+      self.kind = 'complement'
       for t in getRdfObjectList(self.g, value):
         self.implements.append(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#complementOf'):
@@ -446,7 +500,7 @@ def filesof(g, t):
       res.add(f)
   return res
 
-def generate(files):
+def generate(files,cfiles):
   ga = Graph()
   g = {}
   for f in files:
@@ -463,8 +517,11 @@ def generate(files):
     ga += g3
   g['*'] = ga
   r = Registry(g)
-  for context, p, o in g['*'].triples((None, RDF.type, dpa_context)):
-    r.getOrCreateContext(context)
+  for context in cfiles:
+    ctx = r.getOrCreateContext(context)
+    for v in ctx.fldmap.values():
+      if v.startswith('http://') or v.startswith('https://'):
+        g['*'].add((URIRef(v), dpa_context, URIRef(ctx.uri)))
     files = set()
     for s, p, o in g['*'].triples((context, URIRef('http://dpa.li/ns/owl/fixes/meta#target-ontology'), None)):
       files |= filesof(g, (o, RDF.type, owl_Ontology))
@@ -493,13 +550,19 @@ def generate(files):
       for s, p, o in chain(g['*'].triples((s, None, None))):
         property.setMeta(p, o, s)
   r.serialize()
+  r.info()
 
-owl = (
+def filterfiles(l):
+  return (f for f in l if os.path.isfile(f))
+
+owl = [*filterfiles(
     glob('vocab/**/*.owl', recursive=True)
   + glob('vocab/**/*.ttl', recursive=True)
   + glob('download/vocab/**/*.owl', recursive=True)
   + glob('download/vocab/**/*.ttl', recursive=True)
-)
+)]
+context = [*filterfiles(glob('download/context/http*:/**/*', recursive=True))]
+context = [re.sub('^(https?:/)','\\1/',c[17:]) for c in context]
 
-generate(owl)
+generate(owl, context)
 

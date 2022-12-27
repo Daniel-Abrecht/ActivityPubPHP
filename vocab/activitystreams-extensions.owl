@@ -87,11 +87,10 @@ as:Hashtag a owl:Class ;
   rdfs:subClassOf as:Object ;
 .
 
-# Defined by DID
-#as:alsoKnownAs a owl:ObjectProperty ;
-#  rdfs:range xsd:anyURI ;
-#  rdfs:domain fix:Actor ;
-#.
+as:alsoKnownAs a owl:ObjectProperty ;
+  rdfs:range xsd:anyURI ;
+  rdfs:domain fix:Actor ;
+.
 
 as:manuallyApprovesFollowers a owl:DatatypeProperty ;
   rdfs:domain fix:Actor ;

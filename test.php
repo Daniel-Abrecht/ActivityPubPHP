@@ -30,6 +30,7 @@ echo \auto\unserialize('
   "inbox": "https://example.com/inbox",
   "outbox": "https://example.com/outbox",
   "preferredUsername": "Hello World!",
+  "alsoKnownAs": "https://example.com/test",
   "icon": [
     {
       "type": "Link",
