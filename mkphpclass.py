@@ -17,7 +17,7 @@ owl_Ontology = URIRef("http://www.w3.org/2002/07/owl#Ontology")
 owl_DatatypeProperty = URIRef("http://www.w3.org/2002/07/owl#DatatypeProperty")
 owl_ObjectProperty = URIRef("http://www.w3.org/2002/07/owl#ObjectProperty")
 owl_FunctionalProperty = URIRef("http://www.w3.org/2002/07/owl#FunctionalProperty")
-owl_Datatype = URIRef("http://www.w3.org/2000/01/rdf-schema#Datatype")
+owl_onDatatype = URIRef("http://www.w3.org/2002/07/owl#onDatatype")
 owl_properties = [owl_DatatypeProperty,owl_ObjectProperty,owl_FunctionalProperty]
 owl_equivalentProperty = URIRef("http://www.w3.org/2002/07/owl#equivalentProperty")
 owl_sameAs = URIRef("http://www.w3.org/2002/07/owl#sameAs")
@@ -224,14 +224,16 @@ class Class:
     Class.i += 1
     self.i = Class.i
     self.g = registry.g
-    self.kind = 'class'
+    self.kind = 'unknown'
     self.context = set()
     self.registry = registry
     self.uri = uri
     self.comment = []
-    self.implements = []
+    self.implements = set()
     self.property = {}
     self.label = None
+    if str(self.uri) in native_types:
+      self.kind = 'class'
   def addProperty(self, iri, property):
     self.property[iri] = property
   def setMeta(self, key, value):
@@ -242,23 +244,32 @@ class Class:
     elif key == dpa_context:
       self.context.add(value)
     elif key == URIRef('http://www.w3.org/2000/01/rdf-schema#subClassOf'):
-      self.implements.append(self.registry.getOrCreateClass(value))
+      self.implements.add(self.registry.getOrCreateClass(value))
     elif key == URIRef('http://www.w3.org/2002/07/owl#unionOf'):
       self.kind = 'union'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.registry.getOrCreateClass(t))
+        self.implements.add(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#intersectionOf'):
       self.kind = 'intersection'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.registry.getOrCreateClass(t))
+        self.implements.add(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#complementOf'):
       self.kind = 'complement'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.registry.getOrCreateClass(t))
+        self.implements.add(self.registry.getOrCreateClass(t))
     elif key == URIRef('http://www.w3.org/2002/07/owl#complementOf'):
       self.kind = 'complement'
       for t in getRdfObjectList(self.g, value):
-        self.implements.append(self.registry.getOrCreateClass(t))
+        self.implements.add(self.registry.getOrCreateClass(t))
+    elif key == 'kind':
+      if self.kind == 'unknown':
+        self.kind = 'class'
+      if value == rdfs_Datatype:
+        self.kind = 'datatype'
+    elif key == owl_onDatatype:
+      self.kind = 'datatype'
+      self.implements.add(self.registry.getOrCreateClass(value))
+      # TODO: Deal with constraints
   def getAbsNS(self, t='I'):
     if t == 'I' and str(self.uri) in native_types and native_types[str(self.uri)][0]:
       return native_types[str(self.uri)][0]
@@ -266,21 +277,27 @@ class Class:
     if t:
       s = '\\' + s
     return s
+  def getModifiers(self):
+    res = set()
+    for t in self.getConstituents({'direct'}):
+      if str(t.uri) in native_types and native_types[str(t.uri)][1]:
+        res.add((t.getAbsNS('I'), native_types[str(t.uri)][1]))
+    return res
   def getName(self):
     return getName(self.uri)
   def getDirPath(self):
     return '/'.join(split_uri(self.uri)[:-1])
   def getAbsPath(self):
     return '/'.join(split_uri(self.uri)) + '.mod'
-  def getConstituents(self):
+  def getConstituents(self, flags=set()):
     res = set()
     if   self.kind == 'class':
       res.add(self)
-      if str(self.uri) in native_types and native_types[str(self.uri)][2]:
+      if str(self.uri) in native_types and native_types[str(self.uri)][2] and 'direct' not in flags:
         res.add(self.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string')))
-    elif self.kind == 'union':
+    elif self.kind == 'union' or self.kind == 'datatype':
       for t in self.implements:
-        res |= t.getConstituents()
+        res |= t.getConstituents(flags)
     return res
   def getInstTypes(self):
     res = set()
@@ -291,8 +308,8 @@ class Class:
       for t in self.implements:
         res |= t.getInstTypes()
     return res
-  def genTypeConstraint(self):
-    parts = set(t.getAbsNS('I') for t in self.getConstituents())
+  def genTypeConstraint(self, flags):
+    parts = set(t.getAbsNS('I') for t in self.getConstituents(flags))
     return parts
   def serialize(self):
     extra_context = set()
@@ -329,8 +346,8 @@ class Class:
       t  = ''
       tv = ''
       if property.type:
-        t  = property.genTypeConstraint()
-        tv = property.genTypeConstraint(True)
+        t  = property.genTypeConstraint({'direct'})
+        tv = property.genTypeConstraint({'varadic'})
       st = property.getType()
       pp = json.dumps(property.uri)
       pp += ',' + json.dumps(st.uri if st else None)
@@ -357,8 +374,8 @@ class Class:
       t  = ''
       tv = ''
       if property.type:
-        t  = property.genTypeConstraint()
-        tv = property.genTypeConstraint(True)
+        t  = property.genTypeConstraint({'direct'})
+        tv = property.genTypeConstraint({'varadic'})
       if property not in pvs:
         pvs.add(property)
         s += '  private '+t+' $var_'+cname
@@ -373,20 +390,22 @@ class Class:
       s += '{ return $this->var_'+cname+'; }\n'
       s += '  public function set_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = '
       types = []
+      m = ''
       if property.type:
         types = sorted([*property.type.getInstTypes()])
+        m = json.dumps([*property.type.getModifiers()])
       ser = json.dumps(types)
       if property.isArray():
-        s += '\\auto\\array_flatten($value,'+ser+')'
+        s += '\\auto\\array_flatten($value,'+ser+','+m+')'
       else:
         if len(types):
-          s += '\\auto\\deser($value,'+ser+')'
+          s += '\\auto\\deser($value,'+ser+','+m+')'
         else:
           s += '$value'
       s += '; }\n'
       if property.isArray():
-        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_merge($this->var_'+cname+', \\auto\\array_flatten($value,'+ser+')); }\n'
-        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_diff ($this->var_'+cname+', \\auto\\array_flatten($value,'+ser+')); }\n'
+        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_merge($this->var_'+cname+', \\auto\\array_flatten($value,'+ser+','+m+')); }\n'
+        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_diff ($this->var_'+cname+', \\auto\\array_flatten($value,'+ser+','+m+')); }\n'
       s += '\n'
     s += """\
   public function toArray(\\auto\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$context); }
@@ -461,18 +480,20 @@ class Property:
       self.registry.property[value] = self
       self.uri = value
       self.uris.add(value)
-  def genTypeConstraint(self, varadic=False):
+  def genTypeConstraint(self, flags=set()):
     if not self.type:
       return None
-    parts = self.type.genTypeConstraint()
+    parts = self.type.genTypeConstraint(flags)
     if self.nullable:
       parts.add('null')
     res = '|'.join(sorted([*parts]))
     if self.isArray():
-      if varadic:
+      if 'varadic' in flags:
         res += '|array...'
       else:
         res = 'array/*['+res+']*/'
+    if res == 'null':
+      res = ''
     return res
   def isArray(self):
     return not self.datatypeproperty
@@ -535,8 +556,10 @@ def generate(files,cfiles):
         g[f].add(t)
         g['*'].add(t)
   for s, p, o in chain(g['*'].triples((None, RDF.type, owl_Class)),
-                       g['*'].triples((None, RDF.type, rdfs_Class))):
+                       g['*'].triples((None, RDF.type, rdfs_Class)),
+                       g['*'].triples((None, RDF.type, rdfs_Datatype))):
     ci = r.getOrCreateClass(s)
+    ci.setMeta('kind', o)
     for s, p, o in g['*'].triples((s, None, None)):
       ci.setMeta(p, o)
   for pt in owl_properties:

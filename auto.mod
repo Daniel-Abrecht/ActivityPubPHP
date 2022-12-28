@@ -352,17 +352,25 @@ function unserialize(string $s) : ?POJO {
   return fromArray(json_decode($s,true));
 }
 
-function deser($v, array $a=[]){
+function deser_sub($v, array $a=[]){
   if(!is_string($v) || !count($a))
     return $v;
-  try {
-    foreach($a as $class)
-      return new $class($v);
+  foreach($a as $class) try {
+    return new $class($v);
   } catch(Exception $e) {}
   throw new Exception("Failed to convert string ".json_encode($v)." to any of ".json_encode($a));
 }
 
-function array_flatten(array $x, array $expand=[]) : array {
+function deser($v, array $a=[], array $mod=[]){
+  $v = deser_sub($v, $a);
+  foreach($mod as list($ns,$md)){
+    if($v instanceof $ns && !$md($v))
+      throw new Exception("Constraint failed: $md($v)");
+  }
+  return $v;
+}
+
+function array_flatten(array $x, array $expand=[], array $mod=[]) : array {
   $res = [];
   foreach($x as $vs){
     if($vs === null)
@@ -376,7 +384,7 @@ function array_flatten(array $x, array $expand=[]) : array {
   }
   if(count($expand)){
     foreach($res as &$v)
-      $v = deser($v,$expand);
+      $v = deser($v, $expand, $mod);
     unset($v);
   }
   return $res;

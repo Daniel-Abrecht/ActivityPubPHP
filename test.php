@@ -12,6 +12,7 @@ $image_1->set_href("https://dpa.li/avatar.png");
 $image_2 = new \auto\www_w3_org\ns\activitystreams\C_Link();
 $image_2->set_href("https://dpa.li/avatar.png");
 $person->add_image($image_1,$image_2,"https://dpa.li/avatar.png");
+$person->set_published(new DateTime("2022-12-28T00:00:00Z"));
 
 
 echo "[";
@@ -31,6 +32,7 @@ echo \auto\unserialize('
   "outbox": "https://example.com/outbox",
   "preferredUsername": "Hello World!",
   "alsoKnownAs": "https://example.com/test",
+  "published": "2022-12-28T00:00:00Z",
   "icon": [
     {
       "type": "Link",

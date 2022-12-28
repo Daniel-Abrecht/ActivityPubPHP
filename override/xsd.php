@@ -23,7 +23,7 @@ declare(strict_types = 1);
   "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort",null],
   "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",null],
   "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",null],
-  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", null, "override/xsd.php"],
+  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", "\\auto\\www_w3_org\\_2001\\XMLSchema\\C_dateTime::fixup", "override/xsd.php"],
   "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\www_w3_org\\_2001\\XMLSchema\\I_anyURI", null, "override/xsd.php"]
 }
 */
@@ -102,6 +102,26 @@ namespace auto\www_w3_org\_2001\XMLSchema {
     public function __toString() : string { return $this->scalar === null ? '' : $this->scalar; }
     public function serialize() : string { return json_encode($this->scalar); }
     public function unserialize(string $x) : void { $this->scalar = json_decode($x); }
+  }
+
+  class C_dateTime extends \DateTimeImmutable implements \DateTimeInterface, \auto\POJO, \auto\simple_type {
+    public function __construct(\DateTimeInterface|string|null $input=null){
+      if($input instanceof \DateTimeInterface){
+        parent::__construct($input->format('Y-m-d\\TH:i:sp'));
+      }else{
+        parent::__construct($input);
+      }
+    }
+    public function fromArray(array|string $data) : void { \auto\fromArrayHelper($this, $data); }
+    public function toArray($oldns=null) : string { return $this->__toString(); }
+    public function __toString() : string { return $this->format('Y-m-d\\TH:i:sp'); }
+    public function serialize() : string { return json_encode($this->__toString()); }
+    public function unserialize(string $x) : void { $this->__construct(json_decode(x)); } // Evil hack, but works
+    public static function fixup(&$value){
+      if(($value instanceof \DateTimeInterface) && !($value instanceof \auto\POJO) && !($value instanceof \auto\simple_type))
+        $value = new self($value);
+      return true;
+    }
   }
 
 }
