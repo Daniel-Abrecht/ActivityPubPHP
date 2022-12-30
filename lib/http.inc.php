@@ -1,6 +1,7 @@
 <?php
 
-namespace auto\http;
+declare(strict_types = 1);
+namespace dpa\http;
 
 enum VerificationResult {
   case INVALID;
@@ -108,7 +109,7 @@ abstract class Key {
   public \OpenSSLAsymmetricKey $key;
   private static function load_key_string(string $uri) : ?string {
     if($uri === 'Test'){
-      $uri = \auto\BASE . '/test/test.pem';
+      $uri = \dpa\BASE . '/test/test.pem';
     }else if(!str_starts_with($uri, 'https://')){
       trigger_error("Will not handle key from: "+$uri, E_USER_WARNING);
       return null;
@@ -198,8 +199,8 @@ class HTTPSignature {
   public function get_header($header) : ?string {
     switch($header){
       case '(request-target)': return $this->doc->method + ' ' + $this->doc->location;
-      case '(created)': return $this->created;
-      case '(expires)': return $this->expires;
+      case '(created)': return ''.$this->created;
+      case '(expires)': return ''.$this->expires;
     }
     return @$this->doc->headers[$header];
   }

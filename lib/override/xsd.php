@@ -11,24 +11,24 @@ declare(strict_types = 1);
   "http://www.w3.org/2001/XMLSchema#boolean": ["bool",null,null],
   "http://www.w3.org/2001/XMLSchema#base64Binary": ["string",null,null],
   "http://www.w3.org/2001/XMLSchema#hexBinary": ["string",null,null],
-  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\auto\\xsd\\nonPositiveInteger",null],
-  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\auto\\xsd\\negativeInteger",null],
-  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\auto\\xsd\\long",null],
-  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\auto\\xsd\\int",null],
-  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\auto\\xsd\\short",null],
-  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\auto\\xsd\\byte",null],
-  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\auto\\xsd\\nonNegativeInteger",null],
-  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\auto\\xsd\\unsignedLong",null],
-  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\auto\\xsd\\unsignedInt",null],
-  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\auto\\xsd\\unsignedShort",null],
-  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\auto\\xsd\\unsignedByte",null],
-  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\auto\\xsd\\positiveInteger",null],
-  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", "\\auto\\www_w3_org\\_2001\\XMLSchema\\C_dateTime::fixup", "override/xsd.php"],
-  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\auto\\www_w3_org\\_2001\\XMLSchema\\I_anyURI", null, "override/xsd.php"]
+  "http://www.w3.org/2001/XMLSchema#nonPositiveInteger": ["int", "\\dpa\\override\\xsd\\nonPositiveInteger",null],
+  "http://www.w3.org/2001/XMLSchema#negativeInteger": ["int", "\\dpa\\override\\xsd\\negativeInteger",null],
+  "http://www.w3.org/2001/XMLSchema#long": ["int", "\\dpa\\override\\xsd\\long",null],
+  "http://www.w3.org/2001/XMLSchema#int": ["int", "\\dpa\\override\\xsd\\int",null],
+  "http://www.w3.org/2001/XMLSchema#short": ["int", "\\dpa\\override\\xsd\\short",null],
+  "http://www.w3.org/2001/XMLSchema#byte": ["int", "\\dpa\\override\\xsd\\byte",null],
+  "http://www.w3.org/2001/XMLSchema#nonNegativeInteger": ["int", "\\dpa\\override\\xsd\\nonNegativeInteger",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedLong": ["int", "\\dpa\\override\\xsd\\unsignedLong",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedInt": ["int", "\\dpa\\override\\xsd\\unsignedInt",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedShort": ["int", "\\dpa\\override\\xsd\\unsignedShort",null],
+  "http://www.w3.org/2001/XMLSchema#unsignedByte": ["int", "\\dpa\\override\\xsd\\unsignedByte",null],
+  "http://www.w3.org/2001/XMLSchema#positiveInteger": ["int", "\\dpa\\override\\xsd\\positiveInteger",null],
+  "http://www.w3.org/2001/XMLSchema#dateTime": ["\\DateTimeInterface", "\\dpa\\pojo\\www_w3_org\\_2001\\XMLSchema\\C_dateTime::fixup", "lib/override/xsd.php"],
+  "http://www.w3.org/2001/XMLSchema#anyURI": ["\\dpa\\pojo\\www_w3_org\\_2001\\XMLSchema\\I_anyURI", null, "lib/override/xsd.php"]
 }
 */
 
-namespace auto\xsd {
+namespace dpa\override\xsd {
 
   function v_nonPositiveInteger(int $x) : void {
     if($x <= 0)
@@ -92,9 +92,9 @@ namespace auto\xsd {
 
 }
 
-namespace auto\www_w3_org\_2001\XMLSchema {
+namespace dpa\pojo\www_w3_org\_2001\XMLSchema {
 
-  interface I_anyURI extends D_anyURI, \auto\simple_type {}
+  interface I_anyURI extends D_anyURI, \dpa\jsonld\simple_type {}
 
   class C_anyURI extends A_anyURI implements I_anyURI {
     public function __construct(public string $scalar){}
@@ -104,7 +104,7 @@ namespace auto\www_w3_org\_2001\XMLSchema {
     public function unserialize(string $x) : void { $this->scalar = json_decode($x); }
   }
 
-  class C_dateTime extends \DateTimeImmutable implements \DateTimeInterface, \auto\POJO, \auto\simple_type {
+  class C_dateTime extends \DateTimeImmutable implements \DateTimeInterface, \dpa\jsonld\POJO, \dpa\jsonld\simple_type {
     public function __construct(\DateTimeInterface|string|null $input=null){
       if($input instanceof \DateTimeInterface){
         parent::__construct($input->format('Y-m-d\\TH:i:sp'));
@@ -112,13 +112,13 @@ namespace auto\www_w3_org\_2001\XMLSchema {
         parent::__construct($input);
       }
     }
-    public function fromArray(array|string $data) : void { \auto\fromArrayHelper($this, $data); }
+    public function fromArray(array|string $data) : void { \dpa\jsonld\fromArrayHelper($this, $data); }
     public function toArray($oldns=null) : string { return $this->__toString(); }
     public function __toString() : string { return $this->format('Y-m-d\\TH:i:sp'); }
     public function serialize() : string { return json_encode($this->__toString()); }
     public function unserialize(string $x) : void { $this->__construct(json_decode(x)); } // Evil hack, but works
     public static function fixup(&$value){
-      if(($value instanceof \DateTimeInterface) && !($value instanceof \auto\POJO) && !($value instanceof \auto\simple_type))
+      if(($value instanceof \DateTimeInterface) && !($value instanceof \dpa\jsonld\POJO) && !($value instanceof \dpa\jsonld\simple_type))
         $value = new self($value);
       return true;
     }

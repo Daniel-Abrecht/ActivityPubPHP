@@ -1,13 +1,13 @@
 <?php
 declare(strict_types = 1);
 /* override: {
-  "https://www.w3.org/ns/activitystreams#Link": ["\\auto\\www_w3_org\\ns\\activitystreams\\I_Link", null, "override/activitypub.php"]
+  "https://www.w3.org/ns/activitystreams#Link": ["\\dpa\\pojo\\www_w3_org\\ns\\activitystreams\\I_Link", null, "lib/override/activitypub.php"]
 }
 */
 
 
-namespace auto\www_w3_org\ns\activitystreams {
-  interface I_Link extends D_Link, \auto\simple_type {}
+namespace dpa\pojo\www_w3_org\ns\activitystreams {
+  interface I_Link extends D_Link, \dpa\jsonld\simple_type {}
 
   class C_Link extends A_Link implements I_Link {
     public function __construct(string $scalar=null){
@@ -15,7 +15,7 @@ namespace auto\www_w3_org\ns\activitystreams {
         $this->set_href($scalar);
     }
     public function toArray($oldns=null) : array|string|null {
-      foreach(\auto\getAllParents(get_class($this)) as $reflection){
+      foreach(\dpa\jsonld\getAllParents(get_class($this)) as $reflection){
         $info = [];
         foreach($reflection->getMethods() as $entry){
           if(!($attr = @$entry->getAttributes(Property::class)[0]))

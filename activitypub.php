@@ -1,14 +1,12 @@
 <?php
 
 declare(strict_types = 1);
+namespace dpa\activitypub;
 
-namespace auto\activitypub;
+require 'lib/loader.inc.php';
 
-require 'auto.inc.php';
-require 'http.inc.php';
+header('Accept: application/ld+json; profile="https://www.w3.org/ns/activitystreams"');
 
-header('Accept: application/ld+json; profile="http://www.w3.org/ns/activitystreams"');
-
-$request = \auto\http\HTTPDoc::fromCurrentRequest();
+$request = \dpa\http\HTTPDoc::fromCurrentRequest();
 print_r($request);
 print_r($request->verify());

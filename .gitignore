@@ -1,3 +1,5 @@
-auto/
+pojo/
 download/
+build/
+dist/
 tmp/

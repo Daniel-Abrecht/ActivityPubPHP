@@ -1,7 +1,6 @@
 #!/bin/bash
 
-set -e
-. "$(dirname -- "${BASH_SOURCE[0]}")/../env"
+. "$(dirname -- "${BASH_SOURCE[0]}")/../script/env"
 
 args=(
   phps activitypub.php

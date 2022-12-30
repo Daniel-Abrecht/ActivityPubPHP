@@ -25,7 +25,7 @@ dpa_context = URIRef('http://dpa.li/ns/owl/fixes/meta#context')
 
 wrapper = textwrap.TextWrapper(width=80-5)
 
-with open("auto/override_meta.json",'r') as f:
+with open("build/override_meta.json",'r') as f:
   native_types = json.load(f)
 
 def escape_id(s):
@@ -44,7 +44,7 @@ def split_uri(uri, t=None, rla=False):
     parts[-1] = t + '_' + parts[-1]
   if rla:
     parts = parts[:-1]
-  parts.insert(0, 'auto')
+  parts.insert(0, 'dpa\\pojo')
   return [escape_id(part) for part in parts if part not in ['','.','..']]
 
 def getName(uri):
@@ -153,7 +153,9 @@ class Context:
   def getAbsNS(self):
     return '\\'.join(split_uri(self.uri))
   def getDirPath(self):
-    return '/'.join(split_uri(self.uri))
+    u = split_uri(self.uri)
+    u[0] = 'pojo'
+    return '/'.join(u)
   def getAbsPath(self):
     return self.getDirPath() + '/__module__.inc.php'
   def serialize(self):
@@ -286,9 +288,13 @@ class Class:
   def getName(self):
     return getName(self.uri)
   def getDirPath(self):
-    return '/'.join(split_uri(self.uri)[:-1])
+    u = split_uri(self.uri)[:-1]
+    u[0] = 'pojo'
+    return '/'.join(u)
   def getAbsPath(self):
-    return '/'.join(split_uri(self.uri)) + '.inc.php'
+    u = split_uri(self.uri)
+    u[0] = 'pojo'
+    return '/'.join(u) + '.inc.php'
   def getConstituents(self, flags=set()):
     res = set()
     if   self.kind == 'class':
@@ -332,7 +338,7 @@ class Class:
       s += 'interface D_'
     else:
       s += 'interface I_'
-    s += self.getName()+' extends \\auto\\POJO'
+    s += self.getName()+' extends \\dpa\\jsonld\\POJO'
     if len(self.implements):
       s += ', '
       s += ', '.join([cls.getAbsNS('I') for cls in self.implements])
@@ -352,7 +358,7 @@ class Class:
       pp = json.dumps(property.uri)
       pp += ',' + json.dumps(st.uri if st else None)
       pp += ',['+','.join(f'EC{self.i}[{extra_context.index(s)}]' for s in property.context)+']'
-      s += '  #[\\auto\\Property('+pp+')]\n'
+      s += '  #[\\dpa\\jsonld\\Property('+pp+')]\n'
       s += '  public function get_'+pname+'()'
       if t:
         s += ' : ' + t
@@ -396,26 +402,26 @@ class Class:
         m = json.dumps([*property.type.getModifiers()])
       ser = json.dumps(types)
       if property.isArray():
-        s += '\\auto\\array_flatten($value,'+ser+','+m+')'
+        s += '\\dpa\\jsonld\\array_flatten($value,'+ser+','+m+')'
       else:
         if len(types):
-          s += '\\auto\\deser($value,'+ser+','+m+')'
+          s += '\\dpa\\jsonld\\deser($value,'+ser+','+m+')'
         else:
           s += '$value'
       s += '; }\n'
       if property.isArray():
-        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_merge($this->var_'+cname+', \\auto\\array_flatten($value,'+ser+','+m+')); }\n'
-        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_diff ($this->var_'+cname+', \\auto\\array_flatten($value,'+ser+','+m+')); }\n'
+        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_merge($this->var_'+cname+', \\dpa\\jsonld\\array_flatten($value,'+ser+','+m+')); }\n'
+        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_diff ($this->var_'+cname+', \\dpa\\jsonld\\array_flatten($value,'+ser+','+m+')); }\n'
       s += '\n'
     s += """\
-  public function toArray(\\auto\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\auto\\toArrayHelper($this,$context); }
-  public function fromArray(array|string $data) : void { \\auto\\fromArrayHelper($this, $data); }
+  public function toArray(\\dpa\\jsonld\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\dpa\\jsonld\\toArrayHelper($this,$context); }
+  public function fromArray(array|string $data) : void { \\dpa\\jsonld\\fromArrayHelper($this, $data); }
   public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
   public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }
 """
     s += '}\n'
     if nt[2]:
-      s += '\\auto\\load(' + json.dumps(nt[2]) + ');';
+      s += '\\dpa\\load(' + json.dumps(nt[2]) + ');';
     Path(self.getDirPath()).mkdir(parents=True, exist_ok=True)
     with open(self.getAbsPath(), 'w') as f:
       print(s, file=f)

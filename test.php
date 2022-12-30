@@ -1,15 +1,15 @@
 <?php
 
 declare(strict_types = 1);
-require 'auto.inc.php';
+require 'lib/loader.inc.php';
 
 header("Content-Type: application/json");
 
-$person = new \auto\www_w3_org\ns\activitystreams\C_Person();
+$person = new \dpa\pojo\www_w3_org\ns\activitystreams\C_Person();
 $person->set_preferredUsername("Hello World!");
-$image_1 = new \auto\www_w3_org\ns\activitystreams\C_Link();
+$image_1 = new \dpa\pojo\www_w3_org\ns\activitystreams\C_Link();
 $image_1->set_href("https://dpa.li/avatar.png");
-$image_2 = new \auto\www_w3_org\ns\activitystreams\C_Link();
+$image_2 = new \dpa\pojo\www_w3_org\ns\activitystreams\C_Link();
 $image_2->set_href("https://dpa.li/avatar.png");
 $person->add_image($image_1,$image_2,"https://dpa.li/avatar.png");
 $person->set_published(new DateTime("2022-12-28T00:00:00Z"));
@@ -21,7 +21,7 @@ echo $person->serialize();
 
 echo ",";
 
-echo \auto\unserialize('
+echo \dpa\jsonld\unserialize('
 {
   "@context": [
     "https://www.w3.org/ns/activitystreams",
@@ -55,7 +55,7 @@ echo \auto\unserialize('
 
 echo ",";
 
-echo \auto\unserialize('
+echo \dpa\jsonld\unserialize('
 {
   "@context": [
     "https://www.w3.org/ns/activitystreams",

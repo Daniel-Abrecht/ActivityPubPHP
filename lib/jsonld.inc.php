@@ -1,31 +1,7 @@
 <?php
 
 declare(strict_types = 1);
-namespace auto;
-
-const BASE = __DIR__;
-
-function load($file){
-  if(file_exists($file))
-    require_once $file;
-}
-
-spl_autoload_register(function($class_name){
-  if(!str_starts_with($class_name, 'auto\\'))
-    return;
-  $parts = explode('\\', $class_name);
-  $name = array_pop($parts);
-  if($name == '__module__'){
-    $name = '__module__';
-  }else{
-    $name = @explode('_', $name, 2)[1];
-    if(!$name)
-      return;
-  }
-  $namespace = implode('/', $parts);
-  $file = $namespace . '/' . $name . '.inc.php';
-  load($file);
-});
+namespace dpa\jsonld;
 
 interface POJO extends \Serializable {
   public function toArray(ContextHelper $context=null) : array|string|null;
@@ -59,7 +35,7 @@ function lookup_type_by_iri($iri, $key=null){
   $path = implode('\\',$path);
   $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
   $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path);
-  $path = '\auto\\' . $path;
+  $path = '\\dpa\\pojo\\' . $path;
   if(!class_exists($path))
     return null;
   return $path;
@@ -75,7 +51,7 @@ function lookup_context($uri){
   $path = implode('\\',$path);
   $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
   $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path);
-  $path = '\auto\\' . $path;
+  $path = '\\dpa\\pojo\\' . $path;
   if(!class_exists($path))
     return null;
   return $path::META;
