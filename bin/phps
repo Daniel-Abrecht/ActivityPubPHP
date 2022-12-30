@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -e
+file="$1"; shift
+php -l "$file"
+
+(
+  (
+    echo "$BASHPID" >&2
+    exec php -S 127.0.0.1:0 "$file"
+  ) 2>&1 1>&3 | (
+    read pid
+    port="$(head -n 1 | sed 's|.*http://127.0.0.1:\([0-9]\+\).*|\1|')"
+    cat >&2 &
+    a=()
+    for p in "$@"
+      do a+=( "$(sed "s {} http://127.0.0.1:$port " <<<"$p")" )
+    done
+    "${a[@]}" || true
+    kill -- "$pid"
+  )
+) 3>&1
