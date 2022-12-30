@@ -155,7 +155,7 @@ class Context:
   def getDirPath(self):
     return '/'.join(split_uri(self.uri))
   def getAbsPath(self):
-    return self.getDirPath() + '/__module__.mod'
+    return self.getDirPath() + '/__module__.inc.php'
   def serialize(self):
     ldext_c = {}
     ldext_p = {}
@@ -288,7 +288,7 @@ class Class:
   def getDirPath(self):
     return '/'.join(split_uri(self.uri)[:-1])
   def getAbsPath(self):
-    return '/'.join(split_uri(self.uri)) + '.mod'
+    return '/'.join(split_uri(self.uri)) + '.inc.php'
   def getConstituents(self, flags=set()):
     res = set()
     if   self.kind == 'class':

@@ -23,7 +23,7 @@ spl_autoload_register(function($class_name){
       return;
   }
   $namespace = implode('/', $parts);
-  $file = $namespace . '/' . $name . '.mod';
+  $file = $namespace . '/' . $name . '.inc.php';
   load($file);
 });
 

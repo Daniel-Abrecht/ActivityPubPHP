@@ -4,8 +4,8 @@ declare(strict_types = 1);
 
 namespace auto\activitypub;
 
-require 'auto.mod';
-require 'http.mod';
+require 'auto.inc.php';
+require 'http.inc.php';
 
 header('Accept: application/ld+json; profile="http://www.w3.org/ns/activitystreams"');
 

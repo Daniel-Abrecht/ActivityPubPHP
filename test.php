@@ -1,7 +1,7 @@
 <?php
 
 declare(strict_types = 1);
-require 'auto.mod';
+require 'auto.inc.php';
 
 header("Content-Type: application/json");
 
