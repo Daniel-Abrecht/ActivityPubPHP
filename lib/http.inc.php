@@ -7,7 +7,74 @@ enum VerificationResult {
   case INVALID;
   case VALID;
   case NO_SIGNATURE;
+  case VALID_BUT_INSECURE;
 };
+
+class SignatureAlgorithm {
+  public static array $map = [];
+  public function __construct(
+    public string $name,
+    public string $hash_algorithm,
+    public array $signature_algorithm,
+    public ?\DateTimeImmutable $deprecated
+  ){
+    self::$map[$name] = $this;
+  }
+  public function getSignatureAlgorithmsForKeyType(KeyType $kt) : array {
+    $results = [];
+    foreach($signature_algorithm as $sa){
+      if(str_starts_with($sa, 'RSA') && $kt == KeyType::RSA){
+        $results[] = $sa;
+      }else if($sa == 'HMAC' && $kt == KeyType::SYMETRIC){
+        $results[] = $sa;
+      }else if($sa == 'ECDSA' && $kt == KeyType::RSA){
+        $results[] = $sa;
+      }else if(str_starts_with($sa, 'ED') && $kt == KeyType::DSA){
+        $results[] = $sa;
+      }
+    }
+    return $results;
+  }
+  public static function get(?string $algorithm){
+    if(!$algorithm) $algorithm = 'hs2019';
+    return @self::$map[$algorithm];
+  }
+};
+
+new SignatureAlgorithm(
+  'hs2019',
+  'sha512',
+  ['RSASSA-PSS', 'HMAC', 'ECDSA', 'ED25519PH', 'ED25519CTX', 'ED25519'],
+  null
+);
+
+new SignatureAlgorithm(
+  'rsa-sha1',
+  'sha1',
+  ['RSASSA-PKCS1-v1_5'],
+  new \DateTimeImmutable('2014-05-08') // https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-02#appendix-E.2
+);
+
+new SignatureAlgorithm(
+  'rsa-sha256',
+  'sha256',
+  ['RSASSA-PKCS1-v1_5'],
+  new \DateTimeImmutable('2018-05-14') // https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11#appendix-E.2
+);
+
+new SignatureAlgorithm(
+  'hmac-sha256',
+  'sha256',
+  ['HMAC'],
+  new \DateTimeImmutable('2018-05-14') // https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11#appendix-E.2
+);
+
+new SignatureAlgorithm(
+  'ecdsa-sha256',
+  'sha256',
+  ['ECDSA'],
+  new \DateTimeImmutable('2018-05-14') // https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-11#appendix-E.2
+);
 
 class HTTPDoc {
   private static ?HTTPDoc $br = null;
@@ -58,7 +125,7 @@ class HTTPDoc {
   public function verify() : VerificationResult {
     if(!$this->signature)
       return VerificationResult::NO_SIGNATURE;
-    return $this->signature->verify() ? VerificationResult::VALID : VerificationResult::INVALID;
+    return $this->signature->verify();
   }
 };
 
@@ -94,13 +161,16 @@ enum KeyType : int {
   case RSA = 0;
   case DSA = 1;
   case DH = 2;
-  case EC = 4;
+  case EC = 3;
+  case SYMETRIC = -2; // Special case, not an asymetric key
 };
 
-assert(KeyType::RSA == OPENSSL_KEYTYPE_RSA);
-assert(KeyType::DSA == OPENSSL_KEYTYPE_DSA);
-assert(KeyType::DH == OPENSSL_KEYTYPE_DH);
-assert(KeyType::EC == OPENSSL_KEYTYPE_EC);
+// Unfortunately, php won't let me plug them into the enum above...
+if( KeyType::RSA->value != OPENSSL_KEYTYPE_RSA
+ || KeyType::DSA->value != OPENSSL_KEYTYPE_DSA
+ || KeyType::DH ->value != OPENSSL_KEYTYPE_DH
+ || KeyType::EC ->value != OPENSSL_KEYTYPE_EC
+) throw new \Exception("OPENSSL_KEYTYPE_ constants have unexpected values");
 
 abstract class Key {
   public function __construct(\OpenSSLAsymmetricKey $key){
@@ -155,6 +225,10 @@ class PrivateKey extends Key {
   }
 };
 
+/**
+ * Notes
+ * If the signature is valid, don't forget if the expected actor/authority signed it
+ */
 class HTTPSignature {
   public bool $is_auth = false;
   public string $keyId;
@@ -164,6 +238,7 @@ class HTTPSignature {
   public ?int $expires = null;
   public array $headers = [];
   public HTTPDoc $doc;
+
   public static function load(HTTPDoc $doc){
     $sig = new HTTPSignature();
     $sig->doc = $doc;
@@ -193,6 +268,7 @@ class HTTPSignature {
 
     if(!$sig->keyId || !$sig->signature || !$sig->headers)
       return null;
+
     return $sig;
   }
 
@@ -217,13 +293,17 @@ class HTTPSignature {
     return $result;
   }
 
-  public function verify() : bool {
+  public function verify(?DateTimeInterface $received_time=null, bool $received_time_trusted=false) : VerificationResult {
     $key = PublicKey::load($this->keyId);
     if(!$key)
-      return false;
-    echo $key->getType()->name."\n";
-    echo $this->construct_signature_message();
-    echo "\n";
-    return false;
+      return VerificationResult::INVALID;
+    $sa = SignatureAlgorithm::get($this->algorithm);
+    if(!$sa)
+      return VerificationResult::INVALID;
+    $insecure = $sa->deprecated && (!$received_time_trusted || !$received_time || $received_time >= $sa->deprecated);
+    $message = $this->construct_signature_message();
+    print_r([$sa, $message]);
+    //print_r(["result" => openssl_verify($message, base64_decode($this->signature), $key->key, OPENSSL_ALGO_SHA256/*"sha256WithRSAEncryption"*/)]);
+    return VerificationResult::INVALID;
   }
 }
