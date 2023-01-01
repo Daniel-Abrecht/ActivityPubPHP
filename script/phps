@@ -1,8 +1,9 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 file="$1"; shift
-php -l "$file"
+php -l "$file" | ( grep -v "^No syntax errors detected in" || true; ) >&2
 
 (
   (
@@ -11,7 +12,7 @@ php -l "$file"
   ) 2>&1 1>&3 | (
     read pid
     port="$(head -n 1 | sed 's|.*http://127.0.0.1:\([0-9]\+\).*|\1|')"
-    cat >&2 &
+    grep -v '^\[.*] 127.0.0.1:[0-9]\+ ' >&2 &
     a=()
     for p in "$@"
       do a+=( "$(sed "s {} http://127.0.0.1:$port " <<<"$p")" )
