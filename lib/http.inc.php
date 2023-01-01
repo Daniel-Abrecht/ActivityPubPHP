@@ -8,6 +8,34 @@ enum VerificationResult {
   case VALID;
   case NO_SIGNATURE;
   case VALID_BUT_INSECURE;
+
+  public static function any(VerificationResult... $vrs){
+    foreach($vrs as $vr)
+      if($vr == static::INVALID)
+        return static::INVALID;
+    foreach($vrs as $vr)
+      if($vr == static::VALID)
+        return static::VALID;
+    foreach($vrs as $vr)
+      if($vr == static::VALID_BUT_INSECURE)
+        return static::VALID_BUT_INSECURE;
+    return static::NO_SIGNATURE;
+  }
+
+  public static function all(VerificationResult... $vrs){
+    if(!$vrs)
+      return static::NO_SIGNATURE;
+    foreach($vrs as $vr)
+      if($vr == static::INVALID)
+        return static::INVALID;
+    foreach($vrs as $vr)
+      if($vr == static::NO_SIGNATURE)
+        return static::NO_SIGNATURE;
+    foreach($vrs as $vr)
+      if($vr == static::VALID_BUT_INSECURE)
+        return static::VALID_BUT_INSECURE;
+    return static::VALID;
+  }
 };
 
 class SignatureAlgorithm {
@@ -144,6 +172,64 @@ class HTTPDoc {
     if(!$this->signature)
       return VerificationResult::NO_SIGNATURE;
     return $this->signature->verify();
+  }
+  public function checkDigest(?string $header=null, ?\DateTimeImmutable $trusted_verification_date=null) : VerificationResult {
+    if(!$header){
+      $ret = [];
+      foreach(['digest','repr-digest'] as $header)
+        if(isset($this->headers[$headers]))
+          $ret[] = $this->checkDigest($header);
+      return VerificationResult::all(...$ret);
+    }
+    $hashes = [
+      "SHA-512" => [512,"sha512",null],
+      "SHA-384" => [384,"sha384",null],
+      "SHA-256" => [256,"sha256",null],
+      "SHA-1"   => [160,"sha1",new \DateTimeImmutable('2014-05-08')],
+    ];
+    $header = strtolower($header);
+    $digest = $this->headers[$header];
+    if(!$digest)
+      return VerificationResult::NO_SIGNATURE;
+    $insecure = true;
+    $has_signature = true;
+    foreach(explode(',', $digest) as $hash){
+      @list($key, $value) = explode('=', $digest, 2);
+      $key = trim($key);
+      if($value === null){
+        $value = $key;
+        $key = null;
+        $len = strlen($value);
+        foreach($hashes as $hn=>$hash){
+          if( $hash[0]/8*2 == $len // HEX
+           || (($hash[0]/8+2)/3|0)*4 == $len // base64
+          ){
+            $key = $hn;
+            break;
+          }
+        }
+        if(!$key)
+          continue;
+      }
+      $value = trim($value, ": \n\r\t\v\x00");
+      $len = strlen($value);
+      $hash = @$hashes[strtoupper($key)];
+      if($len == $hash[0]/8*2){
+      }else if($len == (($hash[0]/8+2)/3|0)*4){
+        $value = @bin2hex(@base64_decode($value));
+      }else{
+        return VerificationResult::INVALID;
+      }
+      $result = hash($hash[1], $this->message);
+      if(!hash_equals($value, $result)) // Note:
+        return VerificationResult::INVALID;
+      if($hash[2] === null || ($trusted_verification_date && $trusted_verification_date <= $hash[2]))
+        $insecure = false;
+      $has_signature = true;
+    }
+    if(!$has_signature)
+      return VerificationResult::NO_SIGNATURE;
+    return $insecure ? VerificationResult::VALID_BUT_INSECURE : VerificationResult::VALID;
   }
 };
 
@@ -285,7 +371,6 @@ class SymetricKey extends Key implements ISigningKey, IVerificationKey {
 
 /**
  * Notes
- * The message body is not signed! To do that, you need to have a hash of it!
  * If the signature is valid, don't forget to check if the expected actor/authority signed it!
  */
 class HTTPSignature {
@@ -320,7 +405,7 @@ class HTTPSignature {
         $created = strtotime($doc->headers['date']);
       $sig->created = $created;
       $sig->expires = @$dict['expires'];
-      if($dict['headers']){
+      if(@$dict['headers']){
         $sig->headers = array_map('strtolower', explode(' ', $dict['headers']));
       }else{
         if(in_array($sig->algorithm, ['rsa-sha1','rsa-sha256','hmac-sha256','ecdsa-sha256'])){
@@ -359,7 +444,11 @@ class HTTPSignature {
     return implode("\n", $result);
   }
 
-  public function verify(?DateTimeInterface $received_time=null, bool $received_time_trusted=false) : VerificationResult {
+  public function verify(
+    ?DateTimeInterface $received_time=null,
+    bool $received_time_trusted=false,
+    bool $check_message_body=true
+  ) : VerificationResult {
     $key = PublicKey::load($this->keyId);
     if(!$key)
       return VerificationResult::INVALID;
@@ -370,6 +459,16 @@ class HTTPSignature {
     $message = $this->construct_signature_message();
     if(!$sa->verify($key, $message, $this->signature))
       return VerificationResult::INVALID;
-    return !$insecure ? VerificationResult::VALID : VerificationResult::VALID_BUT_INSECURE;
+    $results = [!$insecure ? VerificationResult::VALID : VerificationResult::VALID_BUT_INSECURE];
+    // The spec doesn't ask for the following, but let's check it anyway!
+    if($check_message_body && $this->doc->message){
+      if(in_array('content-digest',$this->headers))
+        return VerificationResult::INVALID; // There is no direct access to the non-decoded content, this mustn't be used
+      if(in_array('digest',$this->headers))
+        $results[] = $this->doc->checkDigest('digest', $received_time_trusted ? $received_time : null);
+      if(in_array('repr-digest',$this->headers))
+        $results[] = $this->doc->checkDigest('repr-digest', $received_time_trusted ? $received_time : null);
+    }
+    return VerificationResult::all(...$results);
   }
 }
