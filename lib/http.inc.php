@@ -131,7 +131,7 @@ class HTTPDoc {
     $this->location = $location;
     $this->message = $message ?? '';
     $this->headers = array_change_key_case($headers, CASE_LOWER);
-    $this->signature = HTTPSignature::load($this);
+    $this->signature = HTTPSignature::fromHTTPDoc($this);
     $this->trim();
   }
   // Remove unnecessary headers & stuff
@@ -168,10 +168,14 @@ class HTTPDoc {
     self::$br = new HTTPDoc($method, $location, $message, getallheaders());
     return self::$br;
   }
-  public function verify() : VerificationResult {
+  public function verify(
+    ?DateTimeInterface $received_time=null,
+    bool $received_time_trusted=false,
+    bool $check_message_body=true
+  ) : VerificationResult {
     if(!$this->signature)
       return VerificationResult::NO_SIGNATURE;
-    return $this->signature->verify();
+    return $this->signature->verify($received_time, $received_time_trusted, $check_message_body);
   }
   public function checkDigest(?string $header=null, ?\DateTimeImmutable $trusted_verification_date=null) : VerificationResult {
     if(!$header){
@@ -372,19 +376,34 @@ class SymetricKey extends Key implements ISigningKey, IVerificationKey {
 /**
  * Notes
  * If the signature is valid, don't forget to check if the expected actor/authority signed it!
+ * Also, if this is used for things like authentication, check if "expires" is set, to make sure it's not going to be reusable later.
  */
 class HTTPSignature {
-  public bool $is_auth = false;
-  public string $keyId;
-  public string $signature;
-  public ?string $algorithm = null; // Note: Do not trust this value
-  public ?int $created = null;
-  public ?int $expires = null;
-  public array $headers = [];
-  public HTTPDoc $doc;
+  private function __construct(
+    public readonly bool $is_auth,
+    public readonly string $keyId,
+    public readonly string $signature,
+    public readonly ?string $algorithm, // Note: Do not trust this value
+    public readonly ?int $created,
+    public readonly ?int $expires,
+    public readonly array $headers,
+    public readonly HTTPDoc $doc,
+    public readonly int $skew_seconds // How much off the clock is allowed to bes
+  ){}
 
-  public static function load(HTTPDoc $doc){
-    $sig = new HTTPSignature();
+  public static function fromHTTPDoc(HTTPDoc $doc){
+    $sig = new class() {
+      public bool $is_auth = false;
+      public string $keyId;
+      public string $signature;
+      public ?string $algorithm = null; // Note: Do not trust this value
+      public ?int $created = null;
+      public ?int $expires = null;
+      public array $headers = [];
+      public HTTPDoc $doc;
+      public int $skew_seconds = 60; // How much off the clock is allowed to bes
+    };
+
     $sig->doc = $doc;
     if(!($sigstr = @$doc->headers['signature'])){
       if(str_starts_with(@$doc->headers['authorization']??'','Signature '))
@@ -418,10 +437,26 @@ class HTTPSignature {
       return null;
     }
 
+    // Not required by the spec, but if these are not signed, we can't trust them, so ignore them instead.
+    if(!in_array('(created)', $sig->headers))
+      $sig->created = null;
+    if(!in_array('(expires)', $sig->headers))
+      $sig->expires = null;
+
     if(!$sig->keyId || !$sig->signature || !$sig->headers)
       return null;
 
-    return $sig;
+    return new HTTPSignature(
+      is_auth: $sig->is_auth,
+      keyId: $sig->keyId,
+      signature: $sig->signature,
+      algorithm: $sig->algorithm,
+      created: $sig->created,
+      expires: $sig->expires,
+      headers: $sig->headers,
+      doc: $sig->doc,
+      skew_seconds: $sig->skew_seconds
+    );
   }
 
   public function get_header($header) : ?string {
@@ -449,6 +484,17 @@ class HTTPSignature {
     bool $received_time_trusted=false,
     bool $check_message_body=true
   ) : VerificationResult {
+    $check_time = $received_time ?? strtotime("now");
+    if($received_time_trusted && $received_time !== null && $received_time - $this->skew_seconds > strtotime("now")){
+      trigger_error("received_time is in the future and received_time_trusted is set to true! Wherever that time came from, it probably should not have been trusted!", E_USER_ERROR);
+      return VerificationResult::INVALID;
+    }
+    if($this->expires !== null && $this->expires - $this->skew_seconds < $check_time)
+      return VerificationResult::INVALID;
+    if($this->created !== null && $this->created + $this->skew_seconds > $check_time)
+      return VerificationResult::INVALID;
+    if($this->expires !== null && $this->created !== null && $this->expires < $this->created)
+      return VerificationResult::INVALID;
     $key = PublicKey::load($this->keyId);
     if(!$key)
       return VerificationResult::INVALID;
@@ -457,18 +503,27 @@ class HTTPSignature {
       return VerificationResult::INVALID;
     $insecure = $sa->deprecated && (!$received_time_trusted || !$received_time || $received_time >= $sa->deprecated);
     $message = $this->construct_signature_message();
+    if(!$message)
+      return VerificationResult::INVALID;
     if(!$sa->verify($key, $message, $this->signature))
       return VerificationResult::INVALID;
-    $results = [!$insecure ? VerificationResult::VALID : VerificationResult::VALID_BUT_INSECURE];
-    // The spec doesn't ask for the following, but let's check it anyway!
-    if($check_message_body && $this->doc->message){
+    $results = [];
+    if( $check_message_body && ( $this->doc->message
+     || in_array('digest', $this->headers)
+     || in_array('repr-digest', $this->headers)
+     || in_array('content-digest', $this->headers)
+    )){
+      // The spec doesn't ask for the checking the content, but let's check it anyway!
       if(in_array('content-digest',$this->headers))
         return VerificationResult::INVALID; // There is no direct access to the non-decoded content, this mustn't be used
       if(in_array('digest',$this->headers))
         $results[] = $this->doc->checkDigest('digest', $received_time_trusted ? $received_time : null);
       if(in_array('repr-digest',$this->headers))
         $results[] = $this->doc->checkDigest('repr-digest', $received_time_trusted ? $received_time : null);
+      if(!$results)
+        return VerificationResult::INVALID;
     }
+    $results[] = !$insecure ? VerificationResult::VALID : VerificationResult::VALID_BUT_INSECURE;
     return VerificationResult::all(...$results);
   }
 }
