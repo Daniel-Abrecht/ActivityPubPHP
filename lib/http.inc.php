@@ -9,7 +9,7 @@ enum VerificationResult {
   case NO_SIGNATURE;
   case VALID_BUT_INSECURE;
 
-  public static function any(VerificationResult... $vrs){
+  public static function any(VerificationResult... $vrs) : VerificationResult {
     foreach($vrs as $vr)
       if($vr == static::INVALID)
         return static::INVALID;
@@ -22,7 +22,7 @@ enum VerificationResult {
     return static::NO_SIGNATURE;
   }
 
-  public static function all(VerificationResult... $vrs){
+  public static function all(VerificationResult... $vrs) : VerificationResult {
     if(!$vrs)
       return static::NO_SIGNATURE;
     foreach($vrs as $vr)
@@ -61,11 +61,11 @@ class SignatureAlgorithm {
     }
     return $results;
   }
-  public static function get(?string $algorithm){
+  public static function get(?string $algorithm) : ?SignatureAlgorithm {
     if(!$algorithm) $algorithm = 'hs2019';
     return @self::$map[$algorithm];
   }
-  public static function add(SignatureAlgorithm... $sas){
+  public static function add(SignatureAlgorithm... $sas) : void {
     foreach($sas as $sa)
       self::$map[$sa->name] = $sa;
   }
@@ -76,7 +76,7 @@ class SignatureAlgorithm {
     }
     if($key instanceof PublicKey)
       return $key->verify($message, $signature, $this->hash_algorithm);
-    trigger_error("Dealing with symetric keys not yet implemented", E_USER_ERROR);
+    trigger_error("Dealing with symetric keys not yet implemented", E_USER_WARNING);
     return false;
   }
 };
@@ -135,7 +135,7 @@ class HTTPDoc {
     $this->trim();
   }
   // Remove unnecessary headers & stuff
-  private function trim(){
+  private function trim() : void {
     $headers = [
       'host' => 1,
       'date' => 1,
@@ -159,7 +159,7 @@ class HTTPDoc {
       }, ARRAY_FILTER_USE_KEY
     );
   }
-  public static function fromCurrentRequest(){
+  public static function fromCurrentRequest() : HTTPDoc {
     if(self::$br)
       return self::$br;
     $method = $_SERVER['REQUEST_METHOD'];
@@ -169,7 +169,7 @@ class HTTPDoc {
     return self::$br;
   }
   public function verify(
-    ?DateTimeInterface $received_time=null,
+    ?\DateTimeInterface $received_time=null,
     bool $received_time_trusted=false,
     bool $check_message_body=true
   ) : VerificationResult {
@@ -177,11 +177,11 @@ class HTTPDoc {
       return VerificationResult::NO_SIGNATURE;
     return $this->signature->verify($received_time, $received_time_trusted, $check_message_body);
   }
-  public function checkDigest(?string $header=null, ?\DateTimeImmutable $trusted_verification_date=null) : VerificationResult {
+  public function checkDigest(?string $header=null, ?\DateTimeInterface $trusted_verification_date=null) : VerificationResult {
     if(!$header){
       $ret = [];
       foreach(['digest','repr-digest'] as $header)
-        if(isset($this->headers[$headers]))
+        if(isset($this->headers[$header]))
           $ret[] = $this->checkDigest($header);
       return VerificationResult::all(...$ret);
     }
@@ -196,10 +196,11 @@ class HTTPDoc {
     if(!$digest)
       return VerificationResult::NO_SIGNATURE;
     $insecure = true;
-    $has_signature = true;
+    $has_signature = false;
     foreach(explode(',', $digest) as $hash){
-      @list($key, $value) = explode('=', $digest, 2);
-      $key = trim($key);
+      $a = explode('=', $digest, 2);
+      $key = trim($a[0]);
+      $value = $a[1]??null;
       if($value === null){
         $value = $key;
         $key = null;
@@ -240,15 +241,16 @@ class HTTPDoc {
 function parse_http_signature(?string $sigstr) : ?array {
   if(!$sigstr)
     return null;
-  if($sigstr && str_starts_with($sigstr, 'Signature '))
+  if(str_starts_with($sigstr, 'Signature '))
     $sigstr = trim(explode(' ', $sigstr, 2)[1]);
   if(!preg_match_all('/[^=,]+(=("([^"\\\\]|\\\\.)+"|[^,]*))?/', $sigstr, $matches, PREG_PATTERN_ORDER))
     return null;
   $matches = $matches[0];
   $dict = [];
   foreach($matches as $str){
-    @list($key, $value) = explode('=', $str, 2);
-    $value ??= '';
+    $a = explode('=', $str, 2);
+    $key = $a[0];
+    $value = $a[1]??'';
     $key = trim($key);
     $key = trim($key);
     if($value){
@@ -277,25 +279,29 @@ enum KeyType : int {
 };
 
 // Unfortunately, php won't let me plug them into the enum above...
-if( KeyType::RSA->value != OPENSSL_KEYTYPE_RSA
- || KeyType::DSA->value != OPENSSL_KEYTYPE_DSA
- || KeyType::DH ->value != OPENSSL_KEYTYPE_DH
- || KeyType::EC ->value != OPENSSL_KEYTYPE_EC
-) throw new \Exception("OPENSSL_KEYTYPE_ constants have unexpected values");
+assert(KeyType::RSA->value == OPENSSL_KEYTYPE_RSA);
+assert(KeyType::DSA->value == OPENSSL_KEYTYPE_DSA);
+assert(KeyType::DH ->value == OPENSSL_KEYTYPE_DH);
+assert(KeyType::EC ->value == OPENSSL_KEYTYPE_EC);
 
+interface IKey {
+  static public function load(string $uri) : ?Key;
+  static public function fromString(string $uri) : ?Key;
+  public function getType() : KeyType;
+};
+interface ISigningKey extends IKey {};
+interface IVerificationKey extends IKey  {};
 
-interface ISigningKey {};
-interface IVerificationKey {};
-
-abstract class Key {
-  private static function load_key_string(string $uri) : ?string {
+abstract class Key implements IKey {
+  protected static function load_key_string(string $uri) : ?string {
     if($uri === 'Test'){
       $uri = \dpa\BASE . '/test/test.pem';
     }else if(!str_starts_with($uri, 'https://')){
-      trigger_error("Will not handle key from: "+$uri, E_USER_WARNING);
+      trigger_error("Will not handle key from: $uri", E_USER_WARNING);
       return null;
     }
-    return file_get_contents($uri);
+    $ret = file_get_contents($uri);
+    return $ret === false ? null : $ret;
   }
   static public function load(string $uri) : ?Key {
     $key = static::load_key_string($uri);
@@ -303,10 +309,6 @@ abstract class Key {
       return null;
     return static::fromString($key);
   }
-  public function getType() : KeyType {
-    return KeyType::from(openssl_pkey_get_details($this->key)['type']);
-  }
-  static public abstract function fromString(string $uri) : ?Key;
 };
 
 abstract class AsymetricKey extends Key {
@@ -314,9 +316,13 @@ abstract class AsymetricKey extends Key {
   public function __construct(\OpenSSLAsymmetricKey $key){
     $this->key = $key;
   }
+  public function getType() : KeyType {
+    $detail = openssl_pkey_get_details($this->key);
+    return $detail ? KeyType::from($detail['type']) : KeyType::UNKNOWN;
+  }
 };
 
-function hashToOpenSSLAlgorithm(string $hash) : int|string|false {
+function hashToOpenSSLAlgorithm(string $hash) : int|false {
   switch($hash){
     case 'sha1': return OPENSSL_ALGO_SHA1;
     case 'sha256': return OPENSSL_ALGO_SHA256;
@@ -334,12 +340,12 @@ class PublicKey extends AsymetricKey implements IVerificationKey {
   }
   public function __toString() : string {
     $result = openssl_pkey_get_details($this->key);
-    return @$result['key'] ?? '';
+    return $result ? ($result['key'] ?? '') : '';
   }
   public function verify(string $message, string $signature, string $hash) : bool {
     $algorithm = hashToOpenSSLAlgorithm($hash);
     if($algorithm === false){
-      trigger_notice("Can't handle hash: $hash");
+      trigger_error("Can't handle hash: $hash");
       return false;
     }
     return openssl_verify($message, $signature, $this->key, $algorithm) === 1;
@@ -371,6 +377,9 @@ class SymetricKey extends Key implements ISigningKey, IVerificationKey {
   public function __toString() : string {
     return $this->key;
   }
+  public function getType() : KeyType {
+    return KeyType::SYMETRIC;
+  }
 }
 
 /**
@@ -391,7 +400,7 @@ class HTTPSignature {
     public readonly int $skew_seconds // How much off the clock is allowed to bes
   ){}
 
-  public static function fromHTTPDoc(HTTPDoc $doc){
+  public static function fromHTTPDoc(HTTPDoc $doc) : ?HTTPSignature {
     $sig = new class() {
       public bool $is_auth = false;
       public string $keyId;
@@ -433,7 +442,7 @@ class HTTPSignature {
           $sig->headers = ['(created)'];
         }
       }
-    } catch(Exception $e) {
+    } catch(\Exception|\Throwable $e) {
       return null;
     }
 
@@ -443,7 +452,7 @@ class HTTPSignature {
     if(!in_array('(expires)', $sig->headers))
       $sig->expires = null;
 
-    if(!$sig->keyId || !$sig->signature || !$sig->headers)
+    if(!$sig->keyId || !$sig->signature)
       return null;
 
     return new HTTPSignature(
@@ -459,7 +468,7 @@ class HTTPSignature {
     );
   }
 
-  public function get_header($header) : ?string {
+  public function get_header(string $header) : ?string {
     switch($header){
       case '(request-target)': return $this->doc->method . ' ' . $this->doc->location;
       case '(created)': return ''.$this->created;
@@ -468,7 +477,7 @@ class HTTPSignature {
     return @$this->doc->headers[$header];
   }
 
-  public function construct_signature_message(){
+  public function construct_signature_message() : ?string {
     $result = [];
     foreach($this->headers as $header){
       $value = $this->get_header($header);
@@ -480,13 +489,13 @@ class HTTPSignature {
   }
 
   public function verify(
-    ?DateTimeInterface $received_time=null,
+    ?\DateTimeInterface $received_time=null,
     bool $received_time_trusted=false,
     bool $check_message_body=true
   ) : VerificationResult {
-    $check_time = $received_time ?? strtotime("now");
-    if($received_time_trusted && $received_time !== null && $received_time - $this->skew_seconds > strtotime("now")){
-      trigger_error("received_time is in the future and received_time_trusted is set to true! Wherever that time came from, it probably should not have been trusted!", E_USER_ERROR);
+    $check_time = $received_time ? $received_time->getTimestamp() : strtotime("now");
+    if($received_time_trusted && $received_time !== null && $received_time->getTimestamp() - $this->skew_seconds > strtotime("now")){
+      trigger_error("received_time is in the future and received_time_trusted is set to true! Wherever that time came from, it probably should not have been trusted!", E_USER_WARNING);
       return VerificationResult::INVALID;
     }
     if($this->expires !== null && $this->expires - $this->skew_seconds < $check_time)
