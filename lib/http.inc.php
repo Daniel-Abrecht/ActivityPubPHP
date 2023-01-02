@@ -165,7 +165,7 @@ class HTTPDoc {
     $method = $_SERVER['REQUEST_METHOD'];
     $location = $_SERVER['REQUEST_URI'];
     $message = file_get_contents('php://input');
-    self::$br = new HTTPDoc($method, $location, $message, getallheaders());
+    self::$br = new HTTPDoc($method, $location, $message?$message:null, getallheaders());
     return self::$br;
   }
   public function verify(
