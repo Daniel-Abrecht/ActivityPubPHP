@@ -349,19 +349,15 @@ class Class:
       pname = getName(piri)
       if property.comment:
         s += '  /**\n' + ''.join([f"   * {s}\n" for s in wrapper.wrap(text='\n'.join(property.comment))]) + '   */\n'
-      t  = ''
-      tv = ''
-      if property.type:
-        t  = property.genTypeConstraint({'direct'})
-        tv = property.genTypeConstraint({'varadic'})
+      t  = property.genTypeConstraint({'direct'})
+      tv = property.genTypeConstraint({'varadic'})
       st = property.getType()
       pp = json.dumps(property.uri)
       pp += ',' + json.dumps(st.uri if st else None)
       pp += ',['+','.join(f'EC{self.i}[{extra_context.index(s)}]' for s in property.context)+']'
       s += '  #[\\dpa\\jsonld\\Property('+pp+')]\n'
       s += '  public function get_'+pname+'()'
-      if t:
-        s += ' : ' + t
+      s += ' : ' + t
       s += ';\n'
       s += '  public function set_'+pname+'('+tv+' $value) : void;\n'
       if property.isArray():
@@ -377,11 +373,8 @@ class Class:
     for piri, property in self.getAllProperties().items():
       pname = getName(piri)
       cname = property.getName()
-      t  = ''
-      tv = ''
-      if property.type:
-        t  = property.genTypeConstraint({'direct'})
-        tv = property.genTypeConstraint({'varadic'})
+      t  = property.genTypeConstraint({'direct'})
+      tv = property.genTypeConstraint({'varadic'})
       if property not in pvs:
         pvs.add(property)
         s += '  private '+t+' $var_'+cname
@@ -391,8 +384,7 @@ class Class:
           s += ' = null'
         s += ';\n'
       s += '  public function get_'+pname+'()'
-      if t:
-        s += ' : ' + t + ' '
+      s += ' : ' + t + ' '
       s += '{ return $this->var_'+cname+'; }\n'
       s += '  public function set_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = '
       types = []
@@ -415,9 +407,9 @@ class Class:
       s += '\n'
     s += """\
   public function toArray(\\dpa\\jsonld\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\dpa\\jsonld\\toArrayHelper($this,$context); }
-  public function fromArray(array|string $data) : void { \\dpa\\jsonld\\fromArrayHelper($this, $data); }
-  public function serialize() : string { return json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); }
-  public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); }
+  public function fromArray(array $data) : void { \\dpa\\jsonld\\fromArrayHelper($this, $data); }
+  public function serialize() : ?string { $a=json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); return $a!==false?$a:null; }
+  public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); } // @phpstan-ignore-line
 """
     s += '}\n'
     if nt[2]:
@@ -487,19 +479,21 @@ class Property:
       self.uri = value
       self.uris.add(value)
   def genTypeConstraint(self, flags=set()):
-    if not self.type:
-      return None
-    parts = self.type.genTypeConstraint(flags)
+    parts = self.type.genTypeConstraint(flags) if self.type else set()
     if self.nullable:
       parts.add('null')
     res = '|'.join(sorted([*parts]))
     if self.isArray():
       if 'varadic' in flags:
-        res += '|array...'
+        if res:
+          res += '|'
+        res += 'array...'
       else:
         res = 'array/*['+res+']*/'
     if res == 'null':
       res = ''
+    if not res:
+      res = 'mixed'
     return res
   def isArray(self):
     return not self.datatypeproperty

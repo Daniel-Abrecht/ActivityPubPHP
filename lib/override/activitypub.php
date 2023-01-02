@@ -14,20 +14,20 @@ namespace dpa\pojo\www_w3_org\ns\activitystreams {
       if($scalar !== null)
         $this->set_href($scalar);
     }
-    public function toArray($oldns=null) : array|string|null {
+    public function toArray(\dpa\jsonld\ContextHelper $context=null) : array|string|null {
       foreach(\dpa\jsonld\getAllParents(get_class($this)) as $reflection){
-        $info = [];
         foreach($reflection->getMethods() as $entry){
-          if(!($attr = @$entry->getAttributes(Property::class)[0]))
+          if(!($attr = @$entry->getAttributes(\dpa\jsonld\Property::class)[0]))
             continue;
           if(!($name = @explode('_', $entry->getName(), 2)[1]))
             continue;
-          $value = $o->{'get_'.$name}();
-          if($name == 'href'){
-            if($value !== null)
-              return parent::toArray($oldns);
-          }else if($value === null || (is_array($value) && count($value) == 0)){
-            return parent::toArray($oldns);
+          $value = $this->{'get_'.$name}();
+          if($name === 'href'){
+            if($value === null){
+              return parent::toArray($context);
+            }
+          }else if($value !== null && !(is_array($value) && count($value) == 0)){
+            return parent::toArray($context);
           }
         }
       }
