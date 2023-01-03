@@ -7,9 +7,9 @@ declare(strict_types = 1);
 
 
 namespace dpa\pojo\www_w3_org\ns\activitystreams {
-  interface I_Link extends D_Link, \dpa\jsonld\simple_type {}
+  interface I_Link extends D_Link {}
 
-  class C_Link extends A_Link implements I_Link {
+  class C_Link extends A_Link implements I_Link, \dpa\jsonld\simple_type {
     public function __construct(string $scalar=null){
       if($scalar !== null)
         $this->set_href($scalar);

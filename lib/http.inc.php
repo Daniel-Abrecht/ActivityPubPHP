@@ -69,7 +69,7 @@ class SignatureAlgorithm {
     foreach($sas as $sa)
       self::$map[$sa->name] = $sa;
   }
-  public function verify(IVerificationKey $key, string $message, string $signature) : bool {
+  public function verify(PublicKey|SymetricKey $key, string $message, string $signature) : bool {
     if(!$this->getSignatureAlgorithmsForKeyType($key->getType())){
       trigger_error("Key not for any of the allowed signature algorithms, refusing to do verification");
       return false;
@@ -284,15 +284,7 @@ assert(KeyType::DSA->value == OPENSSL_KEYTYPE_DSA);
 assert(KeyType::DH ->value == OPENSSL_KEYTYPE_DH);
 assert(KeyType::EC ->value == OPENSSL_KEYTYPE_EC);
 
-interface IKey {
-  static public function load(string $uri) : ?Key;
-  static public function fromString(string $uri) : ?Key;
-  public function getType() : KeyType;
-};
-interface ISigningKey extends IKey {};
-interface IVerificationKey extends IKey  {};
-
-abstract class Key implements IKey {
+abstract class Key {
   protected static function load_key_string(string $uri) : ?string {
     if($uri === 'Test'){
       $uri = \dpa\BASE . '/test/test.pem';
@@ -303,19 +295,19 @@ abstract class Key implements IKey {
     $ret = file_get_contents($uri);
     return $ret === false ? null : $ret;
   }
-  static public function load(string $uri) : ?Key {
+  static public function load(string $uri) : ?static {
     $key = static::load_key_string($uri);
     if(!$key)
       return null;
     return static::fromString($key);
   }
+  static public abstract function fromString(string $uri) : ?static;
+  public abstract function getType() : KeyType;
 };
 
 abstract class AsymetricKey extends Key {
   public \OpenSSLAsymmetricKey $key;
-  public function __construct(\OpenSSLAsymmetricKey $key){
-    $this->key = $key;
-  }
+  public abstract function __construct(\OpenSSLAsymmetricKey $key);
   public function getType() : KeyType {
     $detail = openssl_pkey_get_details($this->key);
     return $detail ? KeyType::from($detail['type']) : KeyType::UNKNOWN;
@@ -331,12 +323,15 @@ function hashToOpenSSLAlgorithm(string $hash) : int|false {
   return false;
 }
 
-class PublicKey extends AsymetricKey implements IVerificationKey {
-  static public function fromString(string $string) : ?PublicKey {
+class PublicKey extends AsymetricKey {
+  public function __construct(\OpenSSLAsymmetricKey $key){
+    $this->key = $key;
+  }
+  static public function fromString(string $string) : ?static {
     $key = openssl_pkey_get_public($string);
     if(!$key)
       return null;
-    return new PublicKey($key);
+    return new static($key);
   }
   public function __toString() : string {
     $result = openssl_pkey_get_details($this->key);
@@ -352,12 +347,15 @@ class PublicKey extends AsymetricKey implements IVerificationKey {
   }
 };
 
-class PrivateKey extends AsymetricKey implements ISigningKey {
-  static public function fromString(string $string) : ?PrivateKey {
+class PrivateKey extends AsymetricKey {
+  public function __construct(\OpenSSLAsymmetricKey $key){
+    $this->key = $key;
+  }
+  static public function fromString(string $string) : ?static {
     $key = openssl_pkey_get_private($string);
     if(!$key)
       return null;
-    return new PrivateKey($key);
+    return new static($key);
   }
   public function __toString() : string {
     $result = null;
@@ -366,13 +364,18 @@ class PrivateKey extends AsymetricKey implements ISigningKey {
   }
 };
 
-class SymetricKey extends Key implements ISigningKey, IVerificationKey {
+interface __ISymetricKey {
+  // This is a helper interface to ensure the constructor signature won't change inderived classes.
+  public function __construct(string $key);
+}
+
+class SymetricKey extends Key implements __ISymetricKey {
   public string $key;
   public function __construct(string $key){
     $this->key = $key;
   }
-  static public function fromString(string $string) : ?SymetricKey {
-    return $string ? new SymetricKey($string) : null;
+  static public function fromString(string $string) : ?static {
+    return $string ? new static($string) : null;
   }
   public function __toString() : string {
     return $this->key;
