@@ -282,8 +282,8 @@ class HTTPSignature {
     public readonly string $keyId,
     public readonly string $signature,
     public readonly ?string $algorithm, // Note: Do not trust this value
-    public readonly ?int $created,
-    public readonly ?int $expires,
+    public readonly int $created,
+    public readonly int $expires,
     public readonly array $headers,
     public readonly HTTPDoc $doc,
     public readonly int $skew_seconds, // How much off the clock is allowed to be
@@ -296,8 +296,8 @@ class HTTPSignature {
       public string $keyId;
       public string $signature;
       public ?string $algorithm = null; // Note: Do not trust this value
-      public ?int $created = null;
-      public ?int $expires = null;
+      public int $created;
+      public int $expires;
       public array $headers = [];
       public HTTPDoc $doc;
       public int $skew_seconds = 60; // How much off the clock is allowed to bes
@@ -319,11 +319,6 @@ class HTTPSignature {
       $sig->keyId = @$dict['keyId'];
       $sig->signature = @base64_decode(@$dict['signature']);
       $sig->algorithm = strtolower(@$dict['algorithm']);
-      $created = @$dict['created'];
-      if(!$created && isset($doc->headers['date']))
-        $created = strtotime($doc->headers['date']);
-      $sig->created = $created;
-      $sig->expires = @$dict['expires'];
       $sig->old_method = in_array($sig->algorithm, ['rsa-sha1','rsa-sha256','hmac-sha256','ecdsa-sha256']);
       if(@$dict['headers']){
         $sig->headers = array_map('strtolower', explode(' ', $dict['headers']));
@@ -334,15 +329,24 @@ class HTTPSignature {
           $sig->headers = ['(created)'];
         }
       }
+      if($sig->old_method)
+        if(in_array('(created)', $sig->headers) || in_array('(expires)', $sig->headers))
+          return null;
+      $created = null;
+      if(in_array('(created)', $sig->headers))
+        $created = @$dict['created'];
+      if($created === null && in_array('date', $sig->headers) && @$doc->headers['date'])
+        $created = strtotime($doc->headers['date']);
+      $sig->created = $created;
+      $expires = null;
+      if(in_array('(expires)', $sig->headers))
+        $expires = @$dict['expires'];
+      if($expires === null)
+        $expires = $created;
+      $sig->expires = $expires;
     } catch(\Exception|\Throwable $e) {
       return null;
     }
-
-    // Not required by the spec, but if these are not signed, we can't trust them, so ignore them instead.
-    if(!in_array('(created)', $sig->headers))
-      $sig->created = null;
-    if(!(in_array('(expires)', $sig->headers) && $sig->expires !== null))
-      $sig->expires = $sig->created;
 
     if(!$sig->keyId || !$sig->signature)
       return null;
@@ -398,14 +402,12 @@ class HTTPSignature {
       trigger_error("received_time is in the future and received_time_trusted is set to true! Wherever that time came from, it probably should not have been trusted!", E_USER_WARNING);
       return VerificationResult::INVALID;
     }
-    if($this->expires !== null && $this->expires - $this->skew_seconds < $check_time)
+    if($this->expires - $this->skew_seconds > $check_time)
       return VerificationResult::INVALID;
-    if($this->created !== null && $this->created + $this->skew_seconds > $check_time)
+    if($this->created + $this->skew_seconds < $check_time)
       return VerificationResult::INVALID;
-    if($this->expires !== null && $this->created !== null && $this->expires < $this->created)
+    if($this->expires < $this->created)
       return VerificationResult::INVALID;
-    if($this->expires === null && $this->is_auth)
-      return VerificationResult::INVALID; // Not required by the spec, but a signatire for authentication which doesn't expire is no good
     $sa = SignatureAlgorithm::get($this->algorithm);
     if(!$sa)
       return VerificationResult::INVALID;
