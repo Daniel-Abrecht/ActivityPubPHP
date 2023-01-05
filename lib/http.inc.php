@@ -172,11 +172,12 @@ class HTTPDoc {
     array|\dpa\crypto\PublicKey|\dpa\crypto\SymetricKey $key,
     ?\DateTimeInterface $received_time=null,
     bool $received_time_trusted=false,
-    bool $check_message_body=true
+    bool $check_message_body=true,
+    ?array $required_headers = null
   ) : VerificationResult {
     if(!$this->signature)
       return VerificationResult::NO_SIGNATURE;
-    return $this->signature->verify($key, $received_time, $received_time_trusted, $check_message_body);
+    return $this->signature->verify($key, $received_time, $received_time_trusted, $check_message_body, $required_headers);
   }
   public function checkDigest(?string $header=null, ?\DateTimeInterface $trusted_verification_date=null) : VerificationResult {
     if(!$header){
@@ -285,7 +286,8 @@ class HTTPSignature {
     public readonly ?int $expires,
     public readonly array $headers,
     public readonly HTTPDoc $doc,
-    public readonly int $skew_seconds // How much off the clock is allowed to bes
+    public readonly int $skew_seconds, // How much off the clock is allowed to be
+    public readonly bool $old_method
   ){}
 
   public static function fromHTTPDoc(HTTPDoc $doc) : ?HTTPSignature {
@@ -299,6 +301,7 @@ class HTTPSignature {
       public array $headers = [];
       public HTTPDoc $doc;
       public int $skew_seconds = 60; // How much off the clock is allowed to bes
+      public bool $old_method;
     };
 
     $sig->doc = $doc;
@@ -321,10 +324,11 @@ class HTTPSignature {
         $created = strtotime($doc->headers['date']);
       $sig->created = $created;
       $sig->expires = @$dict['expires'];
+      $sig->old_method = in_array($sig->algorithm, ['rsa-sha1','rsa-sha256','hmac-sha256','ecdsa-sha256']);
       if(@$dict['headers']){
         $sig->headers = array_map('strtolower', explode(' ', $dict['headers']));
       }else{
-        if(in_array($sig->algorithm, ['rsa-sha1','rsa-sha256','hmac-sha256','ecdsa-sha256'])){
+        if($sig->old_method){
           $sig->headers = ['date'];
         }else{
           $sig->headers = ['(created)'];
@@ -337,8 +341,8 @@ class HTTPSignature {
     // Not required by the spec, but if these are not signed, we can't trust them, so ignore them instead.
     if(!in_array('(created)', $sig->headers))
       $sig->created = null;
-    if(!in_array('(expires)', $sig->headers))
-      $sig->expires = null;
+    if(!(in_array('(expires)', $sig->headers) && $sig->expires !== null))
+      $sig->expires = $sig->created;
 
     if(!$sig->keyId || !$sig->signature)
       return null;
@@ -352,7 +356,8 @@ class HTTPSignature {
       expires: $sig->expires,
       headers: $sig->headers,
       doc: $sig->doc,
-      skew_seconds: $sig->skew_seconds
+      skew_seconds: $sig->skew_seconds,
+      old_method: $sig->old_method
     );
   }
 
@@ -378,10 +383,12 @@ class HTTPSignature {
 
   public function verify(
     array|\dpa\crypto\PublicKey|\dpa\crypto\SymetricKey $key,
-    ?\DateTimeInterface $received_time=null,
-    bool $received_time_trusted=false,
-    bool $check_message_body=true
+    ?\DateTimeInterface $received_time = null,
+    bool $received_time_trusted = false,
+    bool $check_message_body = true,
+    ?array $required_headers = null
   ) : VerificationResult {
+    $insecure = false;
     if(!$key)
       return VerificationResult::INVALID;
     if(!is_array($key))
@@ -397,10 +404,23 @@ class HTTPSignature {
       return VerificationResult::INVALID;
     if($this->expires !== null && $this->created !== null && $this->expires < $this->created)
       return VerificationResult::INVALID;
+    if($this->expires === null && $this->is_auth)
+      return VerificationResult::INVALID; // Not required by the spec, but a signatire for authentication which doesn't expire is no good
     $sa = SignatureAlgorithm::get($this->algorithm);
     if(!$sa)
       return VerificationResult::INVALID;
-    $insecure = $sa->deprecated && (!$received_time_trusted || !$received_time || $received_time >= $sa->deprecated);
+    if($sa->deprecated && (!$received_time_trusted || !$received_time || $received_time >= $sa->deprecated))
+      $insecure = true;
+    if(!$required_headers){
+      if($this->old_method){
+        $required_headers[] = 'date';
+      }else{
+        $required_headers[] = ['(request-target)','(created)'];
+      }
+    }
+    foreach($required_headers as $ki)
+      if(!in_array(strtolower($ki), $this->headers))
+        return VerificationResult::INVALID;
     $message = $this->construct_signature_message();
     if(!$message)
       return VerificationResult::INVALID;
