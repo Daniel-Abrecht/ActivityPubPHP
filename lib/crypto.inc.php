@@ -23,23 +23,7 @@ enum KeyType {
 };
 
 abstract class Key {
-  protected static function load_key_string(string $uri) : ?string {
-    if($uri === 'Test'){
-      $uri = \dpa\BASE . '/test/test.pem';
-    }else if(!str_starts_with($uri, 'https://')){
-      trigger_error("Will not handle key from: $uri", E_USER_WARNING);
-      return null;
-    }
-    $ret = file_get_contents($uri);
-    return $ret === false ? null : $ret;
-  }
-  static public function load(string $uri) : ?static {
-    $key = static::load_key_string($uri);
-    if(!$key)
-      return null;
-    return static::fromString($key);
-  }
-  static public abstract function fromString(string $uri) : ?static;
+  static public abstract function fromString(string $content) : ?static;
   public abstract function getType() : KeyType;
 };
 

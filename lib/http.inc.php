@@ -169,13 +169,14 @@ class HTTPDoc {
     return self::$br;
   }
   public function verify(
+    array|\dpa\crypto\PublicKey|\dpa\crypto\SymetricKey $key,
     ?\DateTimeInterface $received_time=null,
     bool $received_time_trusted=false,
     bool $check_message_body=true
   ) : VerificationResult {
     if(!$this->signature)
       return VerificationResult::NO_SIGNATURE;
-    return $this->signature->verify($received_time, $received_time_trusted, $check_message_body);
+    return $this->signature->verify($key, $received_time, $received_time_trusted, $check_message_body);
   }
   public function checkDigest(?string $header=null, ?\DateTimeInterface $trusted_verification_date=null) : VerificationResult {
     if(!$header){
@@ -376,10 +377,15 @@ class HTTPSignature {
   }
 
   public function verify(
+    array|\dpa\crypto\PublicKey|\dpa\crypto\SymetricKey $key,
     ?\DateTimeInterface $received_time=null,
     bool $received_time_trusted=false,
     bool $check_message_body=true
   ) : VerificationResult {
+    if(!$key)
+      return VerificationResult::INVALID;
+    if(!is_array($key))
+      $key = [$key];
     $check_time = $received_time ? $received_time->getTimestamp() : strtotime("now");
     if($received_time_trusted && $received_time !== null && $received_time->getTimestamp() - $this->skew_seconds > strtotime("now")){
       trigger_error("received_time is in the future and received_time_trusted is set to true! Wherever that time came from, it probably should not have been trusted!", E_USER_WARNING);
@@ -391,9 +397,6 @@ class HTTPSignature {
       return VerificationResult::INVALID;
     if($this->expires !== null && $this->created !== null && $this->expires < $this->created)
       return VerificationResult::INVALID;
-    $key = \dpa\crypto\PublicKey::load($this->keyId);
-    if(!$key)
-      return VerificationResult::INVALID;
     $sa = SignatureAlgorithm::get($this->algorithm);
     if(!$sa)
       return VerificationResult::INVALID;
@@ -401,7 +404,14 @@ class HTTPSignature {
     $message = $this->construct_signature_message();
     if(!$message)
       return VerificationResult::INVALID;
-    if(!$sa->verify($key, $message, $this->signature))
+    $rkey = null;
+    foreach($key as $k){
+      if($sa->verify($k, $message, $this->signature)){
+        $rkey = $k;
+        break;
+      }
+    }
+    if(!$rkey)
       return VerificationResult::INVALID;
     $results = [];
     if( $check_message_body && ( $this->doc->message
