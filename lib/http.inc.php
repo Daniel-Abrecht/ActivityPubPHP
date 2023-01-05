@@ -269,20 +269,24 @@ function parse_http_signature(?string $sigstr) : ?array {
   return $dict;
 }
 
-enum KeyType : int {
-  case UNKNOWN = -1;
-  case RSA = 0;
-  case DSA = 1;
-  case DH = 2;
-  case EC = 3;
-  case SYMETRIC = -2; // Special case, not an asymetric key
-};
+enum KeyType {
+  case UNKNOWN;
+  case RSA;
+  case DSA;
+  case DH;
+  case EC;
+  case SYMETRIC; // Special case, not an asymetric key
 
-// Unfortunately, php won't let me plug them into the enum above...
-assert(KeyType::RSA->value == OPENSSL_KEYTYPE_RSA);
-assert(KeyType::DSA->value == OPENSSL_KEYTYPE_DSA);
-assert(KeyType::DH ->value == OPENSSL_KEYTYPE_DH);
-assert(KeyType::EC ->value == OPENSSL_KEYTYPE_EC);
+  public static function fromOpenSSL(int $c) : KeyType {
+    switch($c){
+      case OPENSSL_KEYTYPE_RSA: return KeyType::RSA;
+      case OPENSSL_KEYTYPE_DSA: return KeyType::DSA;
+      case OPENSSL_KEYTYPE_DH: return KeyType::DH;
+      case OPENSSL_KEYTYPE_EC: return KeyType::EC;
+    }
+    return KeyType::UNKNOWN;
+  }
+};
 
 abstract class Key {
   protected static function load_key_string(string $uri) : ?string {
@@ -310,7 +314,7 @@ abstract class AsymetricKey extends Key {
   public abstract function __construct(\OpenSSLAsymmetricKey $key);
   public function getType() : KeyType {
     $detail = openssl_pkey_get_details($this->key);
-    return $detail ? KeyType::from($detail['type']) : KeyType::UNKNOWN;
+    return KeyType::fromOpenSSL($detail['type']??-1);
   }
 };
 
