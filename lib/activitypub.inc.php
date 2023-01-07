@@ -14,14 +14,14 @@ const SHORT_TYPE = [
 class Config {
   private static ?Config $self = null;
   private function __construct(
-    public readonly string $location
+    public readonly \dpa\router\URL $location
   ){}
   public static function get() : Config {
     if(self::$self)
       return self::$self;
     $baseconfig = \dpa\config\Config::get();
     $json = $baseconfig->json['activitypub'] ?? [];
-    $location = $baseconfig->origin . '/' . ($json['location']??'.well-known/activitypub');
+    $location = new \dpa\router\URL($baseconfig->origin, $json['location'] ?? '.well-known/activitypub');
     self::$self = new Config(location: $location);
     return self::$self;
   }
@@ -38,16 +38,14 @@ class f {
     return $class;
   }
 
-  public static function locationToURL(string $path) : ?string {
+  public static function locationToURL(\dpa\router\URLLocation $location) : \dpa\router\URL {
     $config = Config::get();
-    return \dpa\router\f::normalizeURL($config->location . '/' . $path);
+    return new \dpa\router\URL($config->location, $location);
   }
 
-  public static function actorNameToURL(string $name) : ?string {
-    $path = \dpa\router\f::escapeURL("/actor/{name}", ['name'=>$name]);
-    if(!$path)
-      return null;
-    return f::locationToURL($path);
+  public static function actorNameToURL(string $name) : \dpa\router\URL {
+    $location = new \dpa\router\URLLocation(['actor',$name]);
+    return f::locationToURL($location);
   }
 
 };

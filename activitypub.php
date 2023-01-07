@@ -4,22 +4,22 @@ require_once __DIR__.'/lib/loader.inc.php';
 
 $router = new \dpa\router\Router();
 
-$router->add('/actor/{}', function($name){
+$router->route('get', ['actor',null], function($name){
   header('Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"');
-  print_r([\dpa\activitypub\f::actorNameToURL($name)]);
+  print_r([''.\dpa\activitypub\f::actorNameToURL($name)]);
 });
 
-$router->add('/actor/{}/inbox', function($name){
+$router->route('get', ['actor',null,'inbox'], function($name){
   header('Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"');
-  print_r([\dpa\activitypub\f::actorNameToURL($name)]);
+  print_r([''.\dpa\activitypub\f::actorNameToURL($name)]);
 });
 
-$router->add('/actor/{}/outbox', function($name){
+$router->route('get', ['actor',null,'outbox'], function($name){
   header('Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"');
-  print_r([\dpa\activitypub\f::actorNameToURL($name)]);
+  print_r([''.\dpa\activitypub\f::actorNameToURL($name)]);
 });
 
-$router->route();
+$router->execute();
 
 
 //header('Accept: application/ld+json; profile="https://www.w3.org/ns/activitystreams"');

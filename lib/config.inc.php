@@ -7,7 +7,7 @@ class Config {
   private static ?Config $self = null;
   private function __construct(
     public array $json,
-    public string $origin
+    public \dpa\router\URL $origin
   ){}
   public static function get() : Config {
     if(self::$self)
@@ -20,7 +20,7 @@ class Config {
     $json = array_merge(...$json); // @phpstan-ignore-line
     self::$self = new Config(
       json: $json,
-      origin: $json['origin'] // @phpstan-ignore-line
+      origin: new \dpa\router\URL($json['origin']) // @phpstan-ignore-line
     );
     return self::$self;
   }
