@@ -114,7 +114,7 @@ namespace dpa\pojo\www_w3_org\_2001\XMLSchema {
         parent::__construct();
       }
     }
-    public function fromArray(array $data) : void { \dpa\jsonld\fromArrayHelper($this, $data); }
+    public function fromArray(array $data) : void { \dpa\jsonld\f::fromArrayHelper($this, $data); }
     public function toArray(\dpa\jsonld\ContextHelper $context=null) : string { return $this->__toString(); }
     public function __toString() : string { return $this->format('Y-m-d\\TH:i:sp'); }
     public function serialize() : ?string { $a=json_encode($this->__toString()); return $a!==false?$a:null; }

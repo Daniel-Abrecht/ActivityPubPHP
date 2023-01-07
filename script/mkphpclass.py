@@ -394,20 +394,20 @@ class Class:
         m = json.dumps([*property.type.getModifiers()])
       ser = json.dumps(types)
       if property.isArray():
-        s += '\\dpa\\jsonld\\array_flatten($value,'+ser+','+m+')'
+        s += '\\dpa\\jsonld\\f::array_flatten($value,'+ser+','+m+')'
       else:
         if len(types):
-          s += '\\dpa\\jsonld\\deser($value,'+ser+','+m+')'
+          s += '\\dpa\\jsonld\\f::deser($value,'+ser+','+m+')'
         else:
           s += '$value'
       s += '; }\n'
       if property.isArray():
-        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_merge($this->var_'+cname+', \\dpa\\jsonld\\array_flatten($value,'+ser+','+m+')); }\n'
-        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_diff ($this->var_'+cname+', \\dpa\\jsonld\\array_flatten($value,'+ser+','+m+')); }\n'
+        s += '  public function add_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_merge($this->var_'+cname+', \\dpa\\jsonld\\f::array_flatten($value,'+ser+','+m+')); }\n'
+        s += '  public function del_'+pname+'('+tv+' $value) : void { $this->var_'+cname+' = array_diff ($this->var_'+cname+', \\dpa\\jsonld\\f::array_flatten($value,'+ser+','+m+')); }\n'
       s += '\n'
     s += """\
-  public function toArray(\\dpa\\jsonld\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\dpa\\jsonld\\toArrayHelper($this,$context); }
-  public function fromArray(array $data) : void { \\dpa\\jsonld\\fromArrayHelper($this, $data); }
+  public function toArray(\\dpa\\jsonld\\ContextHelper $context=null) : """+('string|null|' if nt[2] else '')+"""array { return \\dpa\\jsonld\\f::toArrayHelper($this,$context); }
+  public function fromArray(array $data) : void { \\dpa\\jsonld\\f::fromArrayHelper($this, $data); }
   public function serialize() : ?string { $a=json_encode($this->toArray(),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES); return $a!==false?$a:null; }
   public function unserialize(string $data) : void { $this->fromArray(json_decode($data,true)); } // @phpstan-ignore-line
 """

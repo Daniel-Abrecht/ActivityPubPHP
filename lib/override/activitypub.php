@@ -15,7 +15,7 @@ namespace dpa\pojo\www_w3_org\ns\activitystreams {
         $this->set_href($scalar);
     }
     public function toArray(\dpa\jsonld\ContextHelper $context=null) : array|string|null {
-      foreach(\dpa\jsonld\getAllParents(get_class($this)) as $reflection){
+      foreach(\dpa\jsonld\f::getAllParents(get_class($this)) as $reflection){
         foreach($reflection->getMethods() as $entry){
           if(!($attr = @$entry->getAttributes(\dpa\jsonld\Property::class)[0]))
             continue;

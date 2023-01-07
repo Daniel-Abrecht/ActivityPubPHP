@@ -1,7 +1,7 @@
 <?php
 
 declare(strict_types = 1);
-require 'lib/loader.inc.php';
+require_once __DIR__.'/lib/loader.inc.php';
 
 header("Content-Type: application/json");
 
@@ -21,7 +21,7 @@ echo $person->serialize();
 
 echo ",";
 
-echo \dpa\jsonld\unserialize('
+echo \dpa\jsonld\f::unserialize('
 {
   "@context": [
     "https://www.w3.org/ns/activitystreams",
@@ -55,7 +55,7 @@ echo \dpa\jsonld\unserialize('
 
 echo ",";
 
-echo \dpa\jsonld\unserialize('
+echo \dpa\jsonld\f::unserialize('
 {
   "@context": [
     "https://www.w3.org/ns/activitystreams",

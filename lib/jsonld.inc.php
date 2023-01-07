@@ -24,41 +24,6 @@ class Property {
   ){}
 }
 
-function lookup_type_by_iri(string $iri, ?string $key=null) : ?string {
-  if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$iri,$result))
-    return null;
-  if(!@$result[3])
-    return null;
-  $path = explode(@$result[2]?'/':':',$result[3]);
-  if(!$key) $key = @$result[5];
-  if($key) $path[] = $key;
-  if(count($path) != 1)
-    $path[count($path)-1] = 'C_'.$path[count($path)-1];
-  $path = implode('\\',$path);
-  $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
-  $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path??'');
-  $path = '\\dpa\\pojo\\' . $path;
-  if(!class_exists($path))
-    return null;
-  return $path;
-}
-
-function lookup_context(string $uri) : ?array {
-  if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$uri,$result))
-    return null;
-  if(!@$result[3])
-    return null;
-  $path = explode(@$result[2]?'/':':',$result[3]);
-  $path[] = '__module__';
-  $path = implode('\\',$path);
-  $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
-  $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path??'');
-  $path = '\\dpa\\pojo\\' . $path;
-  if(!class_exists($path))
-    return null;
-  return $path::META;
-}
-
 class ContextHelper {
   public array $context = [];
   public array $mapping = [];
@@ -88,7 +53,7 @@ class ContextHelper {
         }
       }
       if($key == '@id'){
-        $lctx = lookup_context($value);
+        $lctx = f::lookup_context($value);
         $this->context[$value] = $lctx;
         if($lctx){
           $this->mapping = array_merge($this->mapping, $lctx['MAPPING']);
@@ -147,7 +112,7 @@ class ContextHelper {
   }
 
   public function lookup(string $key) : ?string {
-    return lookup_type_by_iri($this->key2iri($key));
+    return f::lookup_type_by_iri($this->key2iri($key));
   }
 
   public function merge(ContextHelper|string|array|null ...$contexts) : ContextHelper {
@@ -161,211 +126,250 @@ class ContextHelper {
   }
 }
 
-function getAllParents(object|string $reflection, array &$list=[]) : array {
-  if(!($reflection instanceof \ReflectionClass))
-    $reflection = new \ReflectionClass($reflection); // @phpstan-ignore-line
-  $list[] = $reflection;
-  foreach($reflection->getInterfaces() as $interface){
-    if(in_array($interface, $list))
-      continue;
-    getAllParents($interface, $list);
-  }
-  return $list;
-}
+class f {
 
-function g_compact_sub(array $in, ContextHelper $context, array &$emaps) : array {
-  $out = [];
-  foreach($in as $key => $value){
-    if($key === '@type')
-      $value = $context->iri2key($value, $emaps);
-    if(is_string($key))
-      $key = $context->iri2key($key, $emaps);
-    if(is_array($value))
-      $value = g_compact_sub($value, $context, $emaps);
-    $out[$key] = $value;
+  public static function lookup_type_by_iri(string $iri, ?string $key=null) : ?string {
+    if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$iri,$result))
+      return null;
+    if(!@$result[3])
+      return null;
+    $path = explode(@$result[2]?'/':':',$result[3]);
+    if(!$key) $key = @$result[5];
+    if($key) $path[] = $key;
+    if(count($path) != 1)
+      $path[count($path)-1] = 'C_'.$path[count($path)-1];
+    $path = implode('\\',$path);
+    $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
+    $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path??'');
+    $path = '\\dpa\\pojo\\' . $path;
+    if(!class_exists($path))
+      return null;
+    return $path;
   }
-  return $out;
-}
 
-function g_compact(array $in, ContextHelper $context) : array {
-  $emaps = [];
-  $pmap = [];
-  $res = g_compact_sub($in, $context, $pmap);
-  $actx = array_keys($context->context);
-  if(count($pmap))
-    $actx[] = $pmap;
-  $out = [];
-  if(count($actx) == 1){
-    $out['@context'] = $actx[0];
-  }else{
-    $out['@context'] = $actx;
+  public static function lookup_context(string $uri) : ?array {
+    if(!preg_match('/^([^:]*:(\/\/)?)([^#]*)(#(.*))?$/',$uri,$result))
+      return null;
+    if(!@$result[3])
+      return null;
+    $path = explode(@$result[2]?'/':':',$result[3]);
+    $path[] = '__module__';
+    $path = implode('\\',$path);
+    $path = preg_replace('/[^a-zA-Z0-9_\x7f-\xff\\\\]/', '_', $path);
+    $path = preg_replace('/([\\\\])([0-9])/', '\\1_\\2', $path??'');
+    $path = '\\dpa\\pojo\\' . $path;
+    if(!class_exists($path))
+      return null;
+    return $path::META;
   }
-  $out = $out + $res;
-  return $out;
-}
 
-function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
-  $toplevel = !$context;
-  if(!$context)
-    $context = new ContextHelper();
-  $map = getIRItoNameMap($o);
-  $result = [];
-  $contexts = [];
-  foreach(@$o::NS??[] as $ctx)
-    $contexts[$ctx] = INF;
-  foreach($map as $entry){
-    $value = $o->{'get_'.$entry->name}();
-    if($value === null || (is_array($value) && count($value) == 0))
-      continue;
-    if(!is_array($value) || !isset($value[0]))
-      $value = [$value];
-    foreach($value as &$v){
-      if($v instanceof POJO){
-        $v = $v->toArray($context);
-      }else if($v instanceof simple_type){
-        $v = $v->__toString();
-      }
-    }
-    unset($v);
-    if(count($value) == 1)
-      $value = $value[0];
-    if(!isset($result[$entry->iri])){
-      $result[$entry->iri] = $value;
-      foreach($entry->context as $ctx)
-        $contexts[$ctx] = @$contexts[$ctx] + 1;
-    }
-  }
-  asort($contexts);
-  $context->merge(...array_keys($contexts)); // @phpstan-ignore-line
-  $result = ['@type'=>$o::IRI] + $result;
-  if($toplevel)
-    return g_compact($result, $context);
-  return $result;
-}
-
-function getIRItoNameMap(POJO|string $o) : array {
-  static $iri_map = [];
-  if(is_object($o))
-    $o = get_class($o);
-  if(isset($iri_map[$o]))
-    return $iri_map[$o];
-  $info = [];
-  foreach(getAllParents($o) as $reflection){
-    foreach($reflection->getMethods() as $entry){
-      if(!($attr = @$entry->getAttributes(Property::class)[0]))
+  public static function getAllParents(object|string $reflection, array &$list=[]) : array {
+    if(!($reflection instanceof \ReflectionClass))
+      $reflection = new \ReflectionClass($reflection); // @phpstan-ignore-line
+    $list[] = $reflection;
+    foreach($reflection->getInterfaces() as $interface){
+      if(in_array($interface, $list))
         continue;
-      if(!($name = @explode('_', $entry->getName(), 2)[1]))
-        continue;
-      $prop = $attr->newInstance();
-      $prop->name = $name;
-      $info[preg_replace('/^https?:/','http?:',$prop->iri)] = $prop; // @phpstan-ignore-line
+      f::getAllParents($interface, $list);
     }
+    return $list;
   }
-  ksort($info);
-  $iri_map[$o] = $info;
-  return $info;
-}
 
-function iri_map_get(array $iri_map, string $iri) : ?Property {
-  return @$iri_map[preg_replace('/^https?:/','http?:',$iri)];
-}
-
-function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
-  if(!$context)
-    $context = (new ContextHelper())->merge(@$a['@context'], $o::IRI);
-  $iri_map = getIRItoNameMap($o);
-  foreach($a as $key => $value){
-    $key = $context->key2iri($key);
-    $entry = iri_map_get($iri_map, $key);
-    if(!$entry){
-      if($key[0] != '@')
-        trigger_error("No mapping for IRI: $key\n");
-      continue;
+  public static function g_compact_sub(array $in, ContextHelper $context, array &$emaps) : array {
+    $out = [];
+    foreach($in as $key => $value){
+      if($key === '@type')
+        $value = $context->iri2key($value, $emaps);
+      if(is_string($key))
+        $key = $context->iri2key($key, $emaps);
+      if(is_array($value))
+        $value = f::g_compact_sub($value, $context, $emaps);
+      $out[$key] = $value;
     }
-    if(is_array($value)){
-      if(isset($value[0])){
-        foreach($value as &$v)
-          if(is_array($v))
-            $v = fromArray($v, $context, $entry->defaultType);
-        unset($v);
-      }else{
-        $value = [fromArray($value, $context, $entry->defaultType)];
-      }
+    return $out;
+  }
+
+  public static function g_compact(array $in, ContextHelper $context) : array {
+    $emaps = [];
+    $pmap = [];
+    $res = f::g_compact_sub($in, $context, $pmap);
+    $actx = array_keys($context->context);
+    if(count($pmap))
+      $actx[] = $pmap;
+    $out = [];
+    if(count($actx) == 1){
+      $out['@context'] = $actx[0];
     }else{
-      $value = [$value];
+      $out['@context'] = $actx;
     }
-    $o->{'set_'.$entry->name}(...$value);
+    $out = $out + $res;
+    return $out;
   }
-}
 
-function fromArray(array $a, ContextHelper|array|string $context=null, ?string $defaultType=null) : ?POJO {
-  $context = (new ContextHelper())->merge($context, @$a['@context']);
-  $typefields = array_merge(['@type'], array_keys($context->mapping, '@type', true));
-  foreach($typefields as $typefield){
-    $type = @$a[$typefield];
-    if(is_string($type))
-      break;
-  }
-  if(!is_string($type))
-    $type  = $defaultType;
-  if(!is_string($type))
-    return null;
-  $class = $context->lookup($type);
-  if(!$class)
-    return null;
-  $pojo = new $class();
-  assert($pojo instanceof POJO);
-  fromArrayHelper($pojo, $a, $context);
-  return $pojo;
-}
-
-function toArray(POJO $o) : array|string|null {
-  return $o->toArray();
-}
-
-function serialize(POJO $o) : string {
-  return $o->serialize();
-}
-
-function unserialize(string $s) : ?POJO {
-  $a = json_decode($s,true);
-  if(!is_array($a))
-    return null;
-  return fromArray($a);
-}
-
-function deser_sub(mixed $v, array $a=[]) : mixed {
-  foreach($a as $class) try {
-    return new $class($v);
-  } catch(\Exception|\Throwable $e) {}
-  return $v;
-}
-
-function deser(mixed $v, array $a=[], array $mod=[]){ // @phpstan-ignore-line
-  $v = deser_sub($v, $a);
-  foreach($mod as list($ns,$md)){
-    if($v instanceof $ns && !$md($v))
-      throw new \Exception("Constraint failed: $md(".json_encode($v).")");
-  }
-  return $v;
-}
-
-function array_flatten(array $x, array $expand=[], array $mod=[]) : array {
-  $res = [];
-  foreach($x as $vs){
-    if($vs === null)
-      continue;
-    if(!is_array($vs) || (!isset($vs[0]) && count($vs))){
-      $res[] = $vs;
-      continue;
+  public static function toArrayHelper(POJO $o, ContextHelper $context=null) : array {
+    $toplevel = !$context;
+    if(!$context)
+      $context = new ContextHelper();
+    $map = f::getIRItoNameMap($o);
+    $result = [];
+    $contexts = [];
+    foreach(@$o::NS??[] as $ctx)
+      $contexts[$ctx] = INF;
+    foreach($map as $entry){
+      $value = $o->{'get_'.$entry->name}();
+      if($value === null || (is_array($value) && count($value) == 0))
+        continue;
+      if(!is_array($value) || !isset($value[0]))
+        $value = [$value];
+      foreach($value as &$v){
+        if($v instanceof POJO){
+          $v = $v->toArray($context);
+        }else if($v instanceof simple_type){
+          $v = $v->__toString();
+        }
+      }
+      unset($v);
+      if(count($value) == 1)
+        $value = $value[0];
+      if(!isset($result[$entry->iri])){
+        $result[$entry->iri] = $value;
+        foreach($entry->context as $ctx)
+          $contexts[$ctx] = @$contexts[$ctx] + 1;
+      }
     }
-    foreach(array_flatten($vs) as $v)
-      $res[] = $v;
+    asort($contexts);
+    $context->merge(...array_keys($contexts)); // @phpstan-ignore-line
+    $result = ['@type'=>$o::IRI] + $result;
+    if($toplevel)
+      return f::g_compact($result, $context);
+    return $result;
   }
-  if(count($expand)){
-    foreach($res as &$v)
-      $v = deser($v, $expand, $mod);
-    unset($v);
+
+  public static function getIRItoNameMap(POJO|string $o) : array {
+    static $iri_map = [];
+    if(is_object($o))
+      $o = get_class($o);
+    if(isset($iri_map[$o]))
+      return $iri_map[$o];
+    $info = [];
+    foreach(f::getAllParents($o) as $reflection){
+      foreach($reflection->getMethods() as $entry){
+        if(!($attr = @$entry->getAttributes(Property::class)[0]))
+          continue;
+        if(!($name = @explode('_', $entry->getName(), 2)[1]))
+          continue;
+        $prop = $attr->newInstance();
+        $prop->name = $name;
+        $info[preg_replace('/^https?:/','http?:',$prop->iri)] = $prop; // @phpstan-ignore-line
+      }
+    }
+    ksort($info);
+    $iri_map[$o] = $info;
+    return $info;
   }
-  return $res;
-}
+
+  public static function iri_map_get(array $iri_map, string $iri) : ?Property {
+    return @$iri_map[preg_replace('/^https?:/','http?:',$iri)];
+  }
+
+  public static function fromArrayHelper(POJO $o, array $a, ContextHelper $context=null) : void {
+    if(!$context)
+      $context = (new ContextHelper())->merge(@$a['@context'], $o::IRI);
+    $iri_map = f::getIRItoNameMap($o);
+    foreach($a as $key => $value){
+      $key = $context->key2iri($key);
+      $entry = f::iri_map_get($iri_map, $key);
+      if(!$entry){
+        if($key[0] != '@')
+          trigger_error("No mapping for IRI: $key\n");
+        continue;
+      }
+      if(is_array($value)){
+        if(isset($value[0])){
+          foreach($value as &$v)
+            if(is_array($v))
+              $v = f::fromArray($v, $context, $entry->defaultType);
+          unset($v);
+        }else{
+          $value = [f::fromArray($value, $context, $entry->defaultType)];
+        }
+      }else{
+        $value = [$value];
+      }
+      $o->{'set_'.$entry->name}(...$value);
+    }
+  }
+
+  public static function fromArray(array $a, ContextHelper|array|string $context=null, ?string $defaultType=null) : ?POJO {
+    $context = (new ContextHelper())->merge($context, @$a['@context']);
+    $typefields = array_merge(['@type'], array_keys($context->mapping, '@type', true));
+    foreach($typefields as $typefield){
+      $type = @$a[$typefield];
+      if(is_string($type))
+        break;
+    }
+    if(!is_string($type))
+      $type  = $defaultType;
+    if(!is_string($type))
+      return null;
+    $class = $context->lookup($type);
+    if(!$class)
+      return null;
+    $pojo = new $class();
+    assert($pojo instanceof POJO);
+    f::fromArrayHelper($pojo, $a, $context);
+    return $pojo;
+  }
+
+  public static function toArray(POJO $o) : array|string|null {
+    return $o->toArray();
+  }
+
+  public static function serialize(POJO $o) : string {
+    return $o->serialize();
+  }
+
+  public static function unserialize(string $s) : ?POJO {
+    $a = json_decode($s,true);
+    if(!is_array($a))
+      return null;
+    return f::fromArray($a);
+  }
+
+  public static function deser_sub(mixed $v, array $a=[]) : mixed {
+    foreach($a as $class) try {
+      return new $class($v);
+    } catch(\Exception|\Throwable $e) {}
+    return $v;
+  }
+
+  public static function deser(mixed $v, array $a=[], array $mod=[]){ // @phpstan-ignore-line
+    $v = f::deser_sub($v, $a);
+    foreach($mod as list($ns,$md)){
+      if($v instanceof $ns && !$md($v))
+        throw new \Exception("Constraint failed: $md(".json_encode($v).")");
+    }
+    return $v;
+  }
+
+  public static function array_flatten(array $x, array $expand=[], array $mod=[]) : array {
+    $res = [];
+    foreach($x as $vs){
+      if($vs === null)
+        continue;
+      if(!is_array($vs) || (!isset($vs[0]) && count($vs))){
+        $res[] = $vs;
+        continue;
+      }
+      foreach(f::array_flatten($vs) as $v)
+        $res[] = $v;
+    }
+    if(count($expand)){
+      foreach($res as &$v)
+        $v = f::deser($v, $expand, $mod);
+      unset($v);
+    }
+    return $res;
+  }
+
+};
