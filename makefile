@@ -19,10 +19,9 @@ export BUILDENV=1
 
 all: dist/ActivityPub.tar
 
-dist/ActivityPub.tar: pojo/.done $(shell find ./lib/ -type f)
+dist/ActivityPub.tar: pojo/.done $(shell find ./lib/ -type f) activitypub.php
 	mkdir -p $(dir $@)
 	tar --transform 's|^|/usr/local/share/php/dpa/|' -cf "$@" --exclude=".done" "pojo/" "lib/"
-	tar -tf "$@"
 
 download/.done: $(DOWNLOAD)
 	-patch download/vocab/https:/raw.githubusercontent.com/w3c/vc-data-integrity/main/vocab/security/vocabulary.ttl <patch/security.ttl.patch

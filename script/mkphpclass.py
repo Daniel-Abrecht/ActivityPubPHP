@@ -34,6 +34,12 @@ def escape_id(s):
   s = re.sub('([/\\\\])+', '\\1', s)
   return s
 
+def escapeSQLid(s):
+  return '`' + re.sub('([\\\\`])','\\\\\\1', s) + '`'
+
+def escapeSQLstr(s):
+  return '\'' + re.sub('([\\\\\'])','\\\\\\1', s) + '\''
+
 def split_uri(uri, t=None, rla=False):
   parts = re.split('[/\\\\#?=]+', uri)
   if len(parts) == 1:
@@ -75,11 +81,19 @@ class Registry:
     c = Context(self, uri)
     self.context[uri] = c
     return c
-  def serialize(self):
+  def serialize_php(self):
     for v in self.classes.values():
-      v.serialize()
+      v.serialize_php()
     for v in self.context.values():
-      v.serialize()
+      v.serialize_php()
+  def serialize_mysql(self):
+    s = ''
+    with open("base.sql",'r') as f:
+      s += f.read()
+    with open("pojo/schema.sql", 'w') as f:
+      for v in self.classes.values():
+        s += v.serialize_mysql()
+      print(s, file=f)
   def info(self):
     in_ontology = {str(x) for x in chain(self.classes.keys(), self.property.keys()) if ':' in x}
     for context in self.context.values():
@@ -158,7 +172,7 @@ class Context:
     return '/'.join(u)
   def getAbsPath(self):
     return self.getDirPath() + '/__module__.inc.php'
-  def serialize(self):
+  def serialize_php(self):
     ldext_c = {}
     ldext_p = {}
     ldext_a = {}
@@ -221,6 +235,13 @@ def getRdfObjectList(g, first):
       elif p == URIRef('http://www.w3.org/1999/02/22-rdf-syntax-ns#first'):
         yield o
 
+p2sql = {
+  'int': 'INT',
+  'string': 'VARCHAR(512)',
+  'float': 'FLOAT',
+  'bool': 'BOOLEAN',
+}
+
 class Class:
   def __init__(self, registry, uri):
     Class.i += 1
@@ -279,6 +300,12 @@ class Class:
     if t:
       s = '\\' + s
     return s
+  def getSQLType(self):
+    if str(self.uri) in native_types and native_types[str(self.uri)][0]:
+      if native_types[str(self.uri)][0] in p2sql:
+        return p2sql[native_types[str(self.uri)][0]]
+      return 'JSON'
+    return 'INT'
   def getModifiers(self):
     res = set()
     for t in self.getConstituents({'direct'}):
@@ -317,7 +344,7 @@ class Class:
   def genTypeConstraint(self, flags):
     parts = set(t.getAbsNS('I') for t in self.getConstituents(flags))
     return parts
-  def serialize(self):
+  def serialize_php(self):
     extra_context = set()
     for p in self.property.values():
       extra_context |= p.context
@@ -417,6 +444,35 @@ class Class:
     Path(self.getDirPath()).mkdir(parents=True, exist_ok=True)
     with open(self.getAbsPath(), 'w') as f:
       print(s, file=f)
+  def serialize_mysql(self):
+    if self.kind != 'class':
+      return ''
+    nt = native_types.get(str(self.uri)) or [None, None, None]
+    if nt[0] and not nt[2]:
+      return ''
+    keys = []
+    constraints = []
+    keys.append('  `@id` INT NOT NULL PRIMARY KEY')
+    for prop in {*self.getAllProperties().values()}:
+      if str(prop.uri) == '@id':
+        continue
+      types = prop.type.getConstituents() if prop.type else []
+      nullable = '' if prop.nullable or len(t) != 1 else 'NOT NULL'
+      covered = set()
+      for t in types:
+        type = t.getSQLType()
+        if type in covered:
+          continue
+        covered.add(type)
+        comment = 'COMMENT('+escapeSQLstr(t.uri)+')'
+        keys.append('  '+' '.join([escapeSQLid(prop.uri), type, nullable, comment]))
+    constraints.append('  FOREIGN KEY (`@id`) REFERENCES `@id` (`@id`)')
+    keys += constraints
+    s = ''
+    s += f'CREATE TABLE IF NOT EXISTS {escapeSQLid(self.uri)} (\n'
+    s += ',\n'.join(keys)
+    s += '\n);\n\n'
+    return s
   def getAllProperties(self):
     properties = {}
     for parent in self.implements:
@@ -572,7 +628,8 @@ def generate(files,cfiles):
       property.setMeta('kind', pt, s)
       for s, p, o in chain(g['*'].triples((s, None, None))):
         property.setMeta(p, o, s)
-  r.serialize()
+  r.serialize_php()
+  r.serialize_mysql()
   r.info()
 
 def filterfiles(l):
