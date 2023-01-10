@@ -4,6 +4,8 @@ import re
 import sys
 import json
 import textwrap
+import base64
+import hashlib
 from glob import glob
 from pathlib import Path
 from rdflib import RDF, Graph, URIRef, Literal
@@ -35,10 +37,21 @@ def escape_id(s):
   return s
 
 def escapeSQLid(s):
-  return '`' + re.sub('([\\\\`])','\\\\\\1', s) + '`'
+  s = str(s)
+  result = re.sub('([\\\\`])','\\\\\\1', s)
+  if len(result) > 64: # mysql length limit
+    h = hashlib.sha1(s.encode()).digest()
+    h = base64.b64encode(h).decode()
+    n = getName(s)[:64-len(h)-1]
+    result = n + '\t' + h
+  result = '`' + result + '`'
+  return result
 
 def escapeSQLstr(s):
   return '\'' + re.sub('([\\\\\'])','\\\\\\1', s) + '\''
+
+def cleanlist(l):
+  return [x for x in l if x]
 
 def split_uri(uri, t=None, rla=False):
   parts = re.split('[/\\\\#?=]+', uri)
@@ -87,13 +100,16 @@ class Registry:
     for v in self.context.values():
       v.serialize_php()
   def serialize_mysql(self):
-    s = ''
+    s1  = ''
+    s2 = ''
     with open("base.sql",'r') as f:
-      s += f.read()
+      s1 += f.read()
     with open("pojo/schema.sql", 'w') as f:
       for v in self.classes.values():
-        s += v.serialize_mysql()
-      print(s, file=f)
+        x1, x2 = v.serialize_mysql()
+        s1 += x1
+        s2 += x2
+      print(s1+s2, file=f)
   def info(self):
     in_ontology = {str(x) for x in chain(self.classes.keys(), self.property.keys()) if ':' in x}
     for context in self.context.values():
@@ -235,13 +251,6 @@ def getRdfObjectList(g, first):
       elif p == URIRef('http://www.w3.org/1999/02/22-rdf-syntax-ns#first'):
         yield o
 
-p2sql = {
-  'int': 'INT',
-  'string': 'VARCHAR(512)',
-  'float': 'FLOAT',
-  'bool': 'BOOLEAN',
-}
-
 class Class:
   def __init__(self, registry, uri):
     Class.i += 1
@@ -301,11 +310,16 @@ class Class:
       s = '\\' + s
     return s
   def getSQLType(self):
-    if str(self.uri) in native_types and native_types[str(self.uri)][0]:
-      if native_types[str(self.uri)][0] in p2sql:
-        return p2sql[native_types[str(self.uri)][0]]
+    nt = native_types.get(str(self.uri)) or [None, None, None, None]
+    if nt[3]:
+      return nt[3]
+    if nt[0] and not nt[2]:
       return 'JSON'
     return 'INT'
+  def getSQLTable(self):
+    if str(self.uri) in native_types and native_types[str(self.uri)][3]:
+      return None;
+    return str(self.uri)
   def getModifiers(self):
     res = set()
     for t in self.getConstituents({'direct'}):
@@ -351,7 +365,7 @@ class Class:
     extra_context = sorted(extra_context)
     if self.kind != 'class':
       return
-    nt = native_types.get(str(self.uri)) or [None, None, None]
+    nt = native_types.get(str(self.uri)) or [None, None, None, None]
     if nt[0] and not nt[2]:
       return
     s = '<?php\n\n'
@@ -446,33 +460,32 @@ class Class:
       print(s, file=f)
   def serialize_mysql(self):
     if self.kind != 'class':
-      return ''
-    nt = native_types.get(str(self.uri)) or [None, None, None]
+      return '',''
+    nt = native_types.get(str(self.uri)) or [None, None, None, None]
     if nt[0] and not nt[2]:
-      return ''
-    keys = []
+      return '',''
+    keys = {}
     constraints = []
-    keys.append('  `@id` INT NOT NULL PRIMARY KEY')
-    for prop in {*self.getAllProperties().values()}:
+    #{*self.getAllProperties().values()}:
+    for prop in {*self.property.values()}:
       if str(prop.uri) == '@id':
         continue
-      types = prop.type.getConstituents() if prop.type else []
-      nullable = '' if prop.nullable or len(t) != 1 else 'NOT NULL'
-      covered = set()
-      for t in types:
-        type = t.getSQLType()
-        if type in covered:
-          continue
-        covered.add(type)
-        comment = 'COMMENT('+escapeSQLstr(t.uri)+')'
-        keys.append('  '+' '.join([escapeSQLid(prop.uri), type, nullable, comment]))
-    constraints.append('  FOREIGN KEY (`@id`) REFERENCES `@id` (`@id`)')
-    keys += constraints
+      prop.serialize_mysql(keys, constraints)
+    keys = [keys[k] for _,k in sorted([(len(k),k) for k in keys.keys()])]
+    keys.insert(0, '`@id` INT NOT NULL PRIMARY KEY')
+    constraints.insert(0, 'FOREIGN KEY (`@id`) REFERENCES `@id` (`@id`) ON DELETE CASCADE')
+    keys = ['  '+k for k in keys]
     s = ''
-    s += f'CREATE TABLE IF NOT EXISTS {escapeSQLid(self.uri)} (\n'
+    s += f'CREATE TABLE IF NOT EXISTS {escapeSQLid("t "+self.uri)} (\n'
     s += ',\n'.join(keys)
     s += '\n);\n\n'
-    return s
+    s += f'INSERT IGNORE INTO `@id` (`@type`,`uri`) VALUES (1, {escapeSQLstr(self.uri)});\n\n'
+    s2 = ''
+    constraints = ['  ADD '+c for c in constraints]
+    s2 += f'ALTER TABLE {escapeSQLid("t "+self.uri)}\n'
+    s2 += ',\n'.join(constraints)
+    s2 += '\n;\n\n'
+    return s, s2
   def getAllProperties(self):
     properties = {}
     for parent in self.implements:
@@ -558,6 +571,21 @@ class Property:
     if self.type and self.type.kind == 'class':
       return self.type
     return None
+  def serialize_mysql(self, keys, constraints):
+    types = self.type.getConstituents({'direct'}) if self.type else []
+    nullable = '' if self.nullable or len(t) != 1 else 'NOT NULL'
+    if not types:
+      types = [self.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string'))]
+    for t in types:
+      sqlt = t.getSQLType()
+      table = t.getSQLTable()
+      comment = None # 'COMMENT('+escapeSQLstr(t.uri)+')'
+      name = (table if table else 'v') + ' ' + str(self.uri)
+      name = escapeSQLid(name);
+      if not name in keys:
+        keys[name] = ' '.join(cleanlist([name, sqlt, nullable, comment]))
+        if table:
+          constraints.append('FOREIGN KEY ('+name+') REFERENCES '+escapeSQLid("t "+table)+' (`@id`)')
 Property.i = 1
 
 def fixup(x):

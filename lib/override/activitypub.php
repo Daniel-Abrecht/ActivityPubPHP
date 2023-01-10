@@ -1,7 +1,7 @@
 <?php
 declare(strict_types = 1);
 /* override: {
-  "https://www.w3.org/ns/activitystreams#Link": ["\\dpa\\pojo\\www_w3_org\\ns\\activitystreams\\I_Link", null, "lib/override/activitypub.php"]
+  "https://www.w3.org/ns/activitystreams#Link": ["\\dpa\\pojo\\www_w3_org\\ns\\activitystreams\\I_Link", null, "lib/override/activitypub.php",null]
 }
 */
 

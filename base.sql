@@ -6,5 +6,5 @@ CREATE TABLE IF NOT EXISTS `@id` (
   FOREIGN KEY (`@type`) REFERENCES `@id`(`@id`)
 );
 
-INSERT IGNORE INTO `@id` (1, 1, '@id');
+INSERT IGNORE INTO `@id` (`@id`,`@type`,`uri`) VALUES (1, 1, '@id');
 
