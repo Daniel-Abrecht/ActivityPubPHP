@@ -29,6 +29,7 @@ wrapper = textwrap.TextWrapper(width=80-5)
 
 with open("build/override_meta.json",'r') as f:
   native_types = json.load(f)
+  native_types['http://dpa.li/ns/owl/fixes/types#JSON'] = ['string',None,None,'JSON']
 
 def escape_id(s):
   s = re.sub('[^a-zA-Z0-9_\x7f-\xff\\\\/]', '_', s)
@@ -38,12 +39,12 @@ def escape_id(s):
 
 def escapeSQLid(s):
   s = str(s)
-  result = re.sub('([\\\\`])','\\\\\\1', s)
-  if len(result) > 64: # mysql length limit
+  if len(s) > 64: # mysql length limit
     h = hashlib.sha1(s.encode()).digest()
     h = base64.b64encode(h).decode()
     n = getName(s)[:64-len(h)-1]
-    result = n + '\t' + h
+    s = n + '\t' + h
+  result = re.sub('([\\\\`])','\\\\\\1', s)
   result = '`' + result + '`'
   return result
 
@@ -67,7 +68,10 @@ def split_uri(uri, t=None, rla=False):
   return [escape_id(part) for part in parts if part not in ['','.','..']]
 
 def getName(uri):
-  return split_uri(uri)[-1]
+  p = ''
+  if uri and uri[1] == ' ':
+    p = uri[:2]
+  return p + split_uri(uri)[-1]
 
 class Registry:
   def __init__(self, g):
@@ -100,16 +104,18 @@ class Registry:
     for v in self.context.values():
       v.serialize_php()
   def serialize_mysql(self):
-    s1  = ''
-    s2 = ''
+    s = ['']
     with open("base.sql",'r') as f:
-      s1 += f.read()
+      s[0] += f.read()
     with open("pojo/schema.sql", 'w') as f:
       for v in self.classes.values():
-        x1, x2 = v.serialize_mysql()
-        s1 += x1
-        s2 += x2
-      print(s1+s2, file=f)
+        i=0
+        for l in v.serialize_mysql():
+          if i >= len(s):
+            s.append('')
+          s[i] += l
+          i += 1
+      print('\n'.join(s), file=f)
   def info(self):
     in_ontology = {str(x) for x in chain(self.classes.keys(), self.property.keys()) if ':' in x}
     for context in self.context.values():
@@ -158,7 +164,7 @@ class Context:
           continue
         for k,v in ctx.items():
           if isinstance(v, dict):
-            v = v.get('@id')
+            v = v.get('id')
           if isinstance(v, str) and k[0] != '@':
             self.ldmap[k] = v
     self.fldmap = self.ldmap
@@ -316,10 +322,13 @@ class Class:
     if nt[0] and not nt[2]:
       return 'JSON'
     return 'INT'
-  def getSQLTable(self):
-    if str(self.uri) in native_types and native_types[str(self.uri)][3]:
-      return None;
-    return str(self.uri)
+  def getSQLTable(self, p='t'):
+    if self.kind != 'class':
+      return None
+    nt = native_types.get(str(self.uri)) or [None, None, None, None]
+    if nt[3] or (nt[0] and not nt[2]):
+      return None
+    return p+' ' + str(self.uri)
   def getModifiers(self):
     res = set()
     for t in self.getConstituents({'direct'}):
@@ -336,15 +345,27 @@ class Class:
     u = split_uri(self.uri)
     u[0] = 'pojo'
     return '/'.join(u) + '.inc.php'
-  def getConstituents(self, flags=set()):
+  def getConstituents(self, flags=set(), rec=None):
+    if rec is None:
+      rec = set()
     res = set()
+    if self in rec:
+      return res
+    rec.add(self)
     if   self.kind == 'class':
       res.add(self)
       if str(self.uri) in native_types and native_types[str(self.uri)][2] and 'direct' not in flags:
         res.add(self.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string')))
     elif self.kind == 'union' or self.kind == 'datatype':
       for t in self.implements:
-        res |= t.getConstituents(flags)
+        res |= t.getConstituents(flags - {'derived'}, rec=rec)
+    if 'derived' in flags:
+      newres = set()
+      for c in self.registry.classes.values():
+        for t in res:
+          if t in c.implements and c not in res:
+            newres |= c.getConstituents(flags, rec=rec)
+      res |= newres
     return res
   def getInstTypes(self):
     res = set()
@@ -459,11 +480,9 @@ class Class:
     with open(self.getAbsPath(), 'w') as f:
       print(s, file=f)
   def serialize_mysql(self):
-    if self.kind != 'class':
-      return '',''
-    nt = native_types.get(str(self.uri)) or [None, None, None, None]
-    if nt[0] and not nt[2]:
-      return '',''
+    table = self.getSQLTable()
+    if not table:
+      return []
     keys = {}
     constraints = []
     #{*self.getAllProperties().values()}:
@@ -472,25 +491,84 @@ class Class:
         continue
       prop.serialize_mysql(keys, constraints)
     keys = [keys[k] for _,k in sorted([(len(k),k) for k in keys.keys()])]
-    keys.insert(0, '`@id` INT NOT NULL PRIMARY KEY')
-    constraints.insert(0, 'FOREIGN KEY (`@id`) REFERENCES `@id` (`@id`) ON DELETE CASCADE')
+    keys.insert(0, '`id` INT NOT NULL PRIMARY KEY')
+    for part in self.implements:
+      t = part.getSQLTable()
+      if not t:
+        continue
+      constraints.insert(0, 'FOREIGN KEY (`id`) REFERENCES '+escapeSQLid(str(t))+' (`id`) ON DELETE CASCADE')
+    constraints.insert(0, 'FOREIGN KEY (`id`) REFERENCES `id` (`id`) ON DELETE CASCADE')
     keys = ['  '+k for k in keys]
+    l = []
     s = ''
-    s += f'CREATE TABLE IF NOT EXISTS {escapeSQLid("t "+self.uri)} (\n'
+    s += f'CREATE TABLE IF NOT EXISTS {escapeSQLid(table)} (\n'
     s += ',\n'.join(keys)
     s += '\n);\n\n'
-    s += f'INSERT IGNORE INTO `@id` (`@type`,`uri`) VALUES (1, {escapeSQLstr(self.uri)});\n\n'
-    s2 = ''
+    s += f'INSERT IGNORE INTO `id` (`type`,`uri`) VALUES (1, {escapeSQLstr(self.uri)});\n\n'
+    l.append(s)
     constraints = ['  ADD '+c for c in constraints]
-    s2 += f'ALTER TABLE {escapeSQLid("t "+self.uri)}\n'
-    s2 += ',\n'.join(constraints)
-    s2 += '\n;\n\n'
-    return s, s2
-  def getAllProperties(self):
+    s = ''
+    s += f'ALTER TABLE {escapeSQLid(table)}\n'
+    s += ',\n'.join(constraints)
+    s += '\n;\n\n'
+    l.append(s)
+    l.append(f'''\
+DROP TRIGGER IF EXISTS {escapeSQLid("c "+table[2:])};
+CREATE TRIGGER {escapeSQLid("c "+table[2:])} BEFORE DELETE ON {escapeSQLid(table)}
+  FOR EACH ROW DELETE FROM `id` WHERE `id` = old.`id` AND `@type` = {escapeSQLstr(self.uri)};
+
+''')
+    l.append(self.serialize_mysql_view())
+    return l
+  def serialize_mysql_view(self):
+    view = self.getSQLTable('v')
+    if not view:
+      return []
+    fields = []
+    types = { self: 0 }
+    _i = 1
+    covered = {'`s @id`'}
+    for typ, prop in self.getAllProperties(True).values():
+      if str(prop.uri) == '@id':
+        continue
+      if typ not in types:
+        types[typ] = _i
+        _i += 1
+      i = types[typ]
+      for table, name, sqlt, t in prop.sqlPropInfos():
+        if name in covered:
+          continue
+        covered.add(name)
+        fields.append(f'  `t{i}`.{name}')
+    fields = sorted(sorted(fields),key=len)
+    fields.insert(0,'  `id`.`created`')
+    fields.insert(0,'  `id`.`type`')
+    fields.insert(0,'  `id`.`uri`')
+    fields.insert(0,'  `id`.`id`')
+    fields = ",\n".join(fields)
+    del types[self]
+    joins = ''.join(
+        [ '  INNER JOIN `id` ON `t0`.`id` = `id`.`id`\n']
+      + [f'  INNER JOIN {escapeSQLid(t.getSQLTable())} as `t{i}` ON `t0`.`id` = `t{i}`.`id`\n' for t,i in types.items()]
+    )
+    s = f'''\
+DROP VIEW IF EXISTS {escapeSQLid(view)};
+CREATE VIEW {escapeSQLid(view)} AS
+SELECT
+{fields}
+FROM {escapeSQLid(self.getSQLTable())} as `t0`
+{joins};
+
+'''
+    return s
+  def getAllProperties(self, with_class=False):
     properties = {}
     for parent in self.implements:
-      properties |= parent.getAllProperties()
-    properties |= self.property
+      properties |= parent.getAllProperties(with_class)
+    if with_class:
+      properties |= {k:(self,v) for k,v in self.property.items()}
+    else:
+      properties |= self.property
     return properties
   def getTypes(self):
     return [self]
@@ -572,21 +650,45 @@ class Property:
       return self.type
     return None
   def serialize_mysql(self, keys, constraints):
-    types = self.type.getConstituents({'direct'}) if self.type else []
-    nullable = '' if self.nullable or len(t) != 1 else 'NOT NULL'
-    if not types:
-      types = [self.registry.getOrCreateClass(URIRef('http://www.w3.org/2001/XMLSchema#string'))]
-    for t in types:
-      sqlt = t.getSQLType()
-      table = t.getSQLTable()
-      comment = None # 'COMMENT('+escapeSQLstr(t.uri)+')'
-      name = (table if table else 'v') + ' ' + str(self.uri)
-      name = escapeSQLid(name);
+    info = self.sqlPropInfos()
+    nullable = '' if self.nullable or len(info) != 1 else 'NOT NULL'
+    for table, name, sqlt, t in info:
       if not name in keys:
-        keys[name] = ' '.join(cleanlist([name, sqlt, nullable, comment]))
-        if table:
-          constraints.append('FOREIGN KEY ('+name+') REFERENCES '+escapeSQLid("t "+table)+' (`@id`)')
+        keys[name] = ' '.join(cleanlist([name, sqlt, nullable]))
+        if t.getSQLTable():
+          constraints.append('FOREIGN KEY ('+name+') REFERENCES `id` (`id`)')
+  def sqlPropInfos(self):
+    l = []
+    types = self.type.getConstituents({'direct'}) if self.type else []
+    if not types:
+      types = [self.registry.getOrCreateClass(URIRef('http://dpa.li/ns/owl/fixes/types#JSON'))]
+    for t in types:
+      sqlt = t.getSQLType().upper()
+      table = t.getSQLTable()
+      prefix = '?'
+      if table:
+        prefix = '*'
+      elif 'INT' in sqlt:
+        prefix = 'i'
+      elif sqlt in {'FLOAT','DOUBLE'}:
+        prefix = 'f'
+      elif 'BOOLEAN' == sqlt:
+        prefix = 'b'
+      elif 'VARCHAR' in sqlt or 'TEXT' == sqlt:
+        prefix = 's'
+      elif 'BLOB' == sqlt:
+        prefix = '>'
+      elif 'JSON' == sqlt:
+        prefix = 'J'
+      elif 'DATETIME' == sqlt:
+        prefix = 'D'
+      name = prefix + ' ' + str(self.uri)
+      name = escapeSQLid(name);
+      l.append((table, name, sqlt, t))
+    return l
+
 Property.i = 1
+
 
 def fixup(x):
   if not isinstance(x, URIRef):
@@ -622,6 +724,7 @@ def generate(files,cfiles):
     ga += g3
   g['*'] = ga
   r = Registry(g)
+  r.getOrCreateClass(URIRef('http://dpa.li/ns/owl/fixes/types#JSON'))
   for context in cfiles:
     ctx = r.getOrCreateContext(context)
     for v in ctx.fldmap.values():
