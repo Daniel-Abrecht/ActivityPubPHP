@@ -491,20 +491,22 @@ class Class:
         continue
       prop.serialize_mysql(keys, constraints)
     keys = [keys[k] for _,k in sorted([(len(k),k) for k in keys.keys()])]
-    keys.insert(0, '`id` INT NOT NULL PRIMARY KEY')
+    keys.insert(0, '`id` INT NOT NULL')
+    keys.insert(0, '`created` DATETIME NOT NULL')
+    keys.insert(0, 'PRIMARY KEY (`created`,`id`)')
     for part in self.implements:
       t = part.getSQLTable()
       if not t:
         continue
-      constraints.insert(0, 'FOREIGN KEY (`id`) REFERENCES '+escapeSQLid(str(t))+' (`id`) ON DELETE CASCADE')
-    constraints.insert(0, 'FOREIGN KEY (`id`) REFERENCES `id` (`id`) ON DELETE CASCADE')
+      constraints.insert(0, 'FOREIGN KEY (`created`,`id`) REFERENCES '+escapeSQLid(str(t))+' (`created`,`id`) ON DELETE CASCADE')
+    constraints.insert(0, 'FOREIGN KEY (`created`,`id`) REFERENCES `version` (`created`,`id`) ON DELETE CASCADE')
     keys = ['  '+k for k in keys]
     l = []
     s = ''
     s += f'CREATE TABLE IF NOT EXISTS {escapeSQLid(table)} (\n'
     s += ',\n'.join(keys)
     s += '\n);\n\n'
-    s += f'INSERT IGNORE INTO `id` (`type`,`uri`) VALUES (1, {escapeSQLstr(self.uri)});\n\n'
+    s += f'INSERT IGNORE INTO `id` (`uri`) VALUES ({escapeSQLstr(self.uri)});\n\n'
     l.append(s)
     constraints = ['  ADD '+c for c in constraints]
     s = ''
@@ -515,7 +517,7 @@ class Class:
     l.append(f'''\
 DROP TRIGGER IF EXISTS {escapeSQLid("c "+table[2:])};
 CREATE TRIGGER {escapeSQLid("c "+table[2:])} BEFORE DELETE ON {escapeSQLid(table)}
-  FOR EACH ROW DELETE FROM `id` WHERE `id` = old.`id` AND `@type` = {escapeSQLstr(self.uri)};
+  FOR EACH ROW DELETE FROM `version` WHERE `created` = old.`created` AND `id` = old.`id`;
 
 ''')
     l.append(self.serialize_mysql_view())
@@ -541,14 +543,15 @@ CREATE TRIGGER {escapeSQLid("c "+table[2:])} BEFORE DELETE ON {escapeSQLid(table
         covered.add(name)
         fields.append(f'  `t{i}`.{name}')
     fields = sorted(sorted(fields),key=len)
-    fields.insert(0,'  `id`.`created`')
-    fields.insert(0,'  `id`.`type`')
+    fields.insert(0,'  `version`.`type`')
+    fields.insert(0,'  `version`.`id`')
+    fields.insert(0,'  `version`.`created`')
     fields.insert(0,'  `id`.`uri`')
-    fields.insert(0,'  `id`.`id`')
     fields = ",\n".join(fields)
     del types[self]
     joins = ''.join(
         [ '  INNER JOIN `id` ON `t0`.`id` = `id`.`id`\n']
+      + [ '  INNER JOIN `version` ON `t0`.`created` = `version`.`created` AND `t0`.`id` = `version`.`id`\n']
       + [f'  INNER JOIN {escapeSQLid(t.getSQLTable())} as `t{i}` ON `t0`.`id` = `t{i}`.`id`\n' for t,i in types.items()]
     )
     s = f'''\
